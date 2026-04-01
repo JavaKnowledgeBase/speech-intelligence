@@ -22,7 +22,7 @@ than by passive recognition of words or text.
 - an expert-routed therapy orchestrator in `app/agentic.py`
 - a dedicated integration gateway for output filtering, vectors, environment checks, and attempt ingestion in `app/integrations.py`
 - provider boundaries, agent graph, and runtime provider status in `app/providers.py`
-- repository access for curriculum, vectors, and environment standards in `app/repositories.py`
+- a Supabase-aware repository layer with in-memory fallback in `app/repositories.py`
 - workflow queue handling for caregiver and clinician handoffs in `app/workflows.py`
 - role-aware API endpoints in `app/main.py`
 - seeded child, caregiver, clinician, progress, communication-profile, environment, and curriculum data in `app/data.py`
@@ -80,6 +80,7 @@ The system also now has first-pass support for:
 - child attempt vectors
 - simple nearest-reference matching
 - request-based attempt ingestion through a stable integration contract
+- Supabase-backed reads and writes for repository-managed entities when configured
 
 ## Recommended external stack
 
@@ -99,6 +100,19 @@ The system also now has first-pass support for:
 python -m pip install -r requirements.txt
 uvicorn app.main:app --reload
 ```
+
+## Repository mode
+
+The repository layer supports three runtime modes through `SUPABASE_REPOSITORY_MODE`:
+
+- `auto`: use Supabase when credentials are configured, otherwise fall back to the local in-memory seed store
+- `memory`: force local in-memory behavior even when Supabase credentials are present
+- `supabase`: prefer Supabase and still fall back to in-memory data if a request fails
+
+Required Supabase variables:
+
+- `SUPABASE_URL`
+- `SUPABASE_SERVICE_ROLE_KEY`
 
 ## Useful endpoints
 
@@ -127,8 +141,8 @@ uvicorn app.main:app --reload
 
 ## Immediate next implementation slice
 
-1. Connect Supabase as the actual repository layer.
-2. Persist communication profiles, environment profiles, curriculum targets, and vectors.
+1. Persist sessions, session events, alerts, and progress snapshots through the repository layer too.
+2. Seed Supabase with the current starter data from this repo.
 3. Add a frontend built for tablet, TV, and desktop.
 4. Connect OpenAI as the real conductor, reporting expert, environment reasoner, and output filter.
 5. Connect Deepgram streaming transcription.
