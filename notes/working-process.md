@@ -10,6 +10,28 @@ The progression is:
 2. Numbers `0` to `9`
 3. Words after that
 
+## Device requirement
+
+This app should run well on:
+
+- tablet
+- TV
+- desktop
+
+The child-facing experience should not be limited to a single device class.
+
+It should be designed for:
+
+- touch-first interaction on tablet
+- large buttons and targets
+- readable text from a distance on TV
+- very clear visuals on bigger screens
+- simple navigation without keyboard dependence for child use
+- low-reading and low-friction child interaction
+- responsive layouts that also support desktop use for caregivers, clinicians, and admin workflows
+
+For TV use, the interface should still be usable when the child is a few feet away from the screen.
+
 ## Per-word data strategy
 
 For each word, create a dictionary of:
@@ -128,6 +150,7 @@ For MVP:
 - repeat and reinforce the most teachable pattern
 - pass all child-facing and parent-facing output through the empathy/output-filter layer
 - capture environment notes and compare them against the expected session standard
+- make the child experience usable on tablet, TV, and desktop
 
 ## Long-term interpretation
 

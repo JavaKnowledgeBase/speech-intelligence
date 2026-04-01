@@ -15,6 +15,24 @@ This starter is now architected as an agentic system, not a plain CRUD backend.
 - architecture documentation in `docs/architecture.md`
 - working notes in `notes/`
 
+## Device target
+
+The app must work well on:
+
+- tablet
+- TV
+- desktop
+
+That means future frontend work should prioritize:
+
+- touch-first controls where appropriate
+- large tap targets
+- large visual prompts
+- high readability from a distance on TV
+- minimal reading burden in child mode
+- landscape and large-screen layouts
+- responsive layouts that also fully support desktop caregiver, clinician, and admin use
+
 ## Agentic design
 
 The core therapy loop now runs through specialist experts:
@@ -87,15 +105,16 @@ uvicorn app.main:app --reload
 
 ## Session start shape
 
-`POST /session/start` can now include an optional environment snapshot. If the room looks off-standard, the response includes a calm parent-facing adjustment message before therapy begins.
+`POST /session/start` can include an optional environment snapshot. If the room looks off-standard, the response includes a calm parent-facing adjustment message before therapy begins.
 
 ## Immediate next implementation slice
 
 1. Connect Supabase as the actual repository layer.
 2. Persist communication profiles, environment profiles, curriculum targets, and vectors.
-3. Connect OpenAI as the real conductor, reporting expert, environment reasoner, and output filter.
-4. Connect Deepgram streaming transcription.
-5. Connect Hume engagement scoring.
-6. Connect Temporal workflow dispatch.
-7. Add Clerk auth guards around caregiver, clinician, and admin endpoints.
-8. Replace heuristic vector matching with real embeddings and retrieval.
+3. Add a frontend built for tablet, TV, and desktop.
+4. Connect OpenAI as the real conductor, reporting expert, environment reasoner, and output filter.
+5. Connect Deepgram streaming transcription.
+6. Connect Hume engagement scoring.
+7. Connect Temporal workflow dispatch.
+8. Add Clerk auth guards around caregiver, clinician, and admin endpoints.
+9. Replace heuristic vector matching with real embeddings and retrieval.

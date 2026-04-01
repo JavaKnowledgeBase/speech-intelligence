@@ -12,6 +12,29 @@ The child session should be handled by a conductor agent that consults narrow ex
 - escalation expert
 - reporting expert
 - workflow expert
+- environment expert
+- output filter expert
+
+## Device targets
+
+The app should support:
+
+- tablets
+- TVs
+- desktops
+
+That means the frontend should be optimized for:
+
+- touch-first controls where appropriate
+- large tap targets
+- large visual prompts
+- high legibility from several feet away on TV
+- simple navigation without keyboard dependence for child therapy mode
+- landscape layouts as a first-class target
+- minimal reading burden for the child
+- responsive layouts that also work well on desktop for caregiver, clinician, and admin workflows
+
+The system should not assume a desktop mouse-and-keyboard setup for therapy sessions only, but desktop must still be fully supported as a product surface.
 
 ## Recommended stack
 
@@ -75,12 +98,13 @@ Before production lock-in, benchmark Deepgram against AssemblyAI on real pediatr
 1. LiveKit receives child audio.
 2. Deepgram transcribes and detects turns.
 3. Hume scores vocal engagement.
-4. OpenAI conductor decides advance, retry, reward, or escalate.
-5. Supabase stores session event data.
+4. OpenAI conductor checks room context, progress, and next action.
+5. Supabase stores session and environment data.
 6. Temporal triggers caregiver or clinician workflows.
-7. Clinician console reads reports and overrides goals.
+7. Clinician and caregiver desktop/tablet views read reports and overrides.
 
 ### Human-in-the-loop boundaries
 - AI may coach and score structured drills.
 - AI should escalate when confidence drops.
+- AI should ask for room adjustments when the environment is off-standard.
 - AI should not diagnose or override clinician-set constraints.
