@@ -1,5 +1,25 @@
 # Codex TODO
 
+## 2026-04-01 Stop Point
+
+Completed in `speech-intellegence` today:
+- added a dedicated speech integration gateway and pushed it in commit `201328c`
+- documented repository runtime mode behavior and pushed it in commit `198c860`
+- fixed the active Supabase runtime persistence path for sessions, session events, alerts, reviews, and attempt vectors
+- added startup hydration for attempt vectors and clinician reviews
+- added regression coverage in `tests/test_persistence.py`
+- verified with:
+  - `python -m compileall app tests`
+  - `pytest tests/test_persistence.py tests/test_session.py tests/test_workflows.py -q`
+
+Best resume point for tomorrow:
+1. review and push the current runtime-persistence checkpoint if not already pushed in the final commit of this session
+2. seed Supabase with the current starter child, goal, profile, environment, curriculum, and vector data so hydration uses real rows instead of only local seeds
+3. wire goal persistence more fully so session `current_goal_id` hydration is reliable from Supabase data
+4. consider moving remaining runtime reads for sessions, alerts, reviews, and progress behind a single persistence/repository contract instead of mixed direct-store access
+5. clean up UTC datetime deprecation warnings by moving from `datetime.utcnow()` to timezone-aware UTC timestamps
+6. after persistence is stable, start the first frontend shell for tablet, TV, and desktop
+
 ## Best pause point for brain work
 
 A good pause point for the deeper "brain part" work is after these two items are done:
@@ -83,4 +103,3 @@ Immediate next focus in `speech-intellegence`:
 - identify deletions, consolidations, and module boundaries before deeper brain work
 
 See `notes/speech-filters-handoff-2026-04-01.md` for the full handoff.
-

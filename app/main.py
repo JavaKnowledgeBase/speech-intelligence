@@ -42,19 +42,28 @@ from app.models import (
     VectorMatchResult,
     WorkflowQueueSnapshot,
 )
+from app.workflows import workflow_manager
 
 
 @asynccontextmanager
 async def lifespan(application: FastAPI):
-    """Hydrate in-memory store from Supabase on startup when configured."""
+    """Hydrate runtime state from Supabase on startup when configured."""
     if db.enabled():
         for child_id in list(store.children.keys()):
             progress = persistence.load_progress_for_child(child_id)
-            store.progress.update(progress)
-            for session in persistence.load_sessions_for_child(child_id):
+            if progress:
+                store.progress.update(progress)
+            sessions = persistence.load_sessions_for_child(child_id)
+            for session in sessions:
                 store.sessions[session.session_id] = session
+            attempts = persistence.load_attempt_vectors_for_child(child_id)
+            if attempts:
+                store.attempt_vectors[child_id] = attempts
         for alert in persistence.load_alerts():
             store.alerts[alert.alert_id] = alert
+        workflow_manager.clinician_reviews = {
+            review.review_id: review for review in persistence.load_reviews()
+        }
     yield
 
 
@@ -239,9 +248,6 @@ def child_report(child_id: str) -> ChildReport:
 @app.get("/enterprise/usage", response_model=EnterpriseUsage)
 def get_enterprise_usage() -> EnterpriseUsage:
     return orchestrator.enterprise_usage()
-
-
-# ── Analytics ─────────────────────────────────────────────────────────────────
 
 
 @app.get("/analytics/child/{child_id}", response_model=ChildAnalytics)
