@@ -34,6 +34,10 @@ class TherapyRepository:
     def get_attempt_vectors(self, child_id: str) -> list[ChildAttemptVector]:
         return store.attempt_vectors.get(child_id, [])
 
+    def save_attempt_vector(self, attempt: ChildAttemptVector) -> ChildAttemptVector:
+        store.attempt_vectors.setdefault(attempt.child_id, []).append(attempt)
+        return attempt
+
     def get_child_profile(self, child_id: str) -> CommunicationProfile | None:
         return store.child_communication_profiles.get(child_id)
 

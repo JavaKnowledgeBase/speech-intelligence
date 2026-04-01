@@ -260,6 +260,16 @@ class SpeechInputRequest(BaseModel):
     attention_score: float = Field(ge=0.0, le=1.0, default=0.8)
 
 
+class AttemptIngestionRequest(BaseModel):
+    session_id: str
+    child_id: str
+    target_text: str
+    transcript: str
+    pronunciation_score: float = Field(ge=0.0, le=1.0)
+    engagement_score: float = Field(ge=0.0, le=1.0)
+    success_flag: bool
+
+
 class SpeechEvaluation(BaseModel):
     recognized_text: str
     expected_text: str

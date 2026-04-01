@@ -9,6 +9,7 @@ from app.models import (
     AlertAcknowledgeResponse,
     AgentGraph,
     ArchitectureBlueprint,
+    AttemptIngestionRequest,
     ChildAttemptVector,
     ChildProfile,
     ChildReport,
@@ -108,6 +109,15 @@ def reference_vectors(target_id: str = Query(...)) -> list[ReferenceVector]:
 @app.get("/vectors/attempts", response_model=list[ChildAttemptVector])
 def attempt_vectors(child_id: str = Query(...)) -> list[ChildAttemptVector]:
     return orchestrator.list_attempt_vectors(child_id)
+
+
+@app.post("/vectors/attempts", response_model=ChildAttemptVector)
+def ingest_attempt_vector(payload: AttemptIngestionRequest) -> ChildAttemptVector:
+    if payload.child_id not in store.children:
+        raise HTTPException(status_code=404, detail="Child not found")
+    if payload.session_id not in store.sessions:
+        raise HTTPException(status_code=404, detail="Session not found")
+    return orchestrator.ingest_attempt(payload)
 
 
 @app.get("/vectors/match", response_model=VectorMatchResult | None)

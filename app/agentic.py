@@ -4,11 +4,13 @@ from datetime import datetime
 from uuid import uuid4
 
 from app.data import store
+from app.integrations import integration_gateway
 from app.models import (
     Alert,
     AlertAcknowledgeResponse,
     AgentGraph,
     ArchitectureBlueprint,
+    AttemptIngestionRequest,
     ChildAttemptVector,
     ChildProfile,
     ChildReport,
@@ -36,8 +38,7 @@ from app.models import (
     VectorMatchResult,
     WorkflowQueueSnapshot,
 )
-from app.providers import EngagementExpert, OutputFilterExpert, PlannerExpert, ProviderCatalog, ReasoningExpert, SpeechExpert, WorkflowExpert
-from app.repositories import repository
+from app.providers import EngagementExpert, PlannerExpert, ProviderCatalog, ReasoningExpert, SpeechExpert, WorkflowExpert
 from app.workflows import workflow_manager
 
 
@@ -48,28 +49,21 @@ class TherapyOrchestrator:
         self.reasoning_expert = ReasoningExpert()
         self.planner_expert = PlannerExpert()
         self.workflow_expert = WorkflowExpert()
-        self.output_filter_expert = OutputFilterExpert()
 
     def _progress_for(self, child_id: str, target_text: str) -> ProgressSnapshot:
         return store.progress.get((child_id, target_text), ProgressSnapshot(child_id=child_id, target_text=target_text))
 
     def child_profile(self, child_id: str) -> CommunicationProfile | None:
-        return repository.get_child_profile(child_id)
+        return integration_gateway.get_child_profile(child_id)
 
     def parent_profile(self, caregiver_id: str) -> CommunicationProfile | None:
-        return repository.get_parent_profile(caregiver_id)
+        return integration_gateway.get_parent_profile(caregiver_id)
 
     def environment_profile(self, child_id: str) -> EnvironmentProfile | None:
-        return repository.get_environment_profile(child_id)
+        return integration_gateway.get_environment_profile(child_id)
 
     def _filter_output(self, audience: str, text: str, owner_id: str | None = None) -> tuple[FilteredMessage, list]:
-        profile = None
-        if audience == "child" and owner_id:
-            profile = self.child_profile(owner_id)
-        if audience == "parent" and owner_id:
-            profile = self.parent_profile(owner_id)
-        filtered, trace = self.output_filter_expert.filter_text(audience, text, profile=profile)
-        return filtered, [trace]
+        return integration_gateway.filter_output(audience, text, owner_id=owner_id)
 
     def choose_next_goal(self, child: ChildProfile) -> tuple[Goal, float]:
         ranked_goals = sorted(child.goals, key=lambda goal: self._progress_for(child.child_id, goal.target_text).mastery_score)
@@ -87,7 +81,6 @@ class TherapyOrchestrator:
         environment_ok = self.environment_profile(child_id) is not None
         environment_note = None if environment_ok else "No environment baseline yet. Ask parent for a 360 degree room photo."
         parent_message = None
-        environment_result = None
         if payload.environment is not None:
             environment_result = self.check_environment(payload.environment)
             environment_ok = environment_result.matches_standard
@@ -160,6 +153,24 @@ class TherapyOrchestrator:
         workflow_trace = self.workflow_expert.record("Therapy turn processed through expert pipeline.")
         success = pronunciation_score >= 0.9 and engagement_score >= 0.55
         confidence_score = reasoning_trace.confidence
+        attempt = self.ingest_attempt(
+            AttemptIngestionRequest(
+                session_id=session_id,
+                child_id=session.child_id,
+                target_text=attempted_target,
+                transcript=transcript,
+                pronunciation_score=round(pronunciation_score, 2),
+                engagement_score=engagement_score,
+                success_flag=success,
+            )
+        )
+        session.events.append(
+            SessionEvent(
+                timestamp=datetime.utcnow(),
+                kind="attempt_vector_recorded",
+                detail=f"Stored attempt {attempt.attempt_id} with top match {attempt.top_match_reference_id or 'none'} at similarity {attempt.cosine_similarity:.2f}",
+            )
+        )
 
         if success:
             self._update_progress(session.child_id, attempted_target, success=True)
@@ -205,19 +216,22 @@ class TherapyOrchestrator:
         return store.environment_profiles[child_id]
 
     def check_environment(self, payload: EnvironmentCheckRequest) -> EnvironmentCheckResult:
-        return repository.check_environment(payload)
+        return integration_gateway.check_environment(payload)
 
     def list_curriculum(self) -> list[TargetCurriculumItem]:
-        return repository.list_curriculum()
+        return integration_gateway.list_curriculum()
 
     def list_reference_vectors(self, target_id: str) -> list[ReferenceVector]:
-        return repository.get_reference_vectors(target_id)
+        return integration_gateway.list_reference_vectors(target_id)
 
     def list_attempt_vectors(self, child_id: str) -> list[ChildAttemptVector]:
-        return repository.get_attempt_vectors(child_id)
+        return integration_gateway.list_attempt_vectors(child_id)
 
     def match_reference(self, target_id: str, modality: str, embedding: list[float]) -> VectorMatchResult | None:
-        return repository.match_reference(target_id, modality, embedding)
+        return integration_gateway.match_reference(target_id, modality, embedding)
+
+    def ingest_attempt(self, payload: AttemptIngestionRequest) -> ChildAttemptVector:
+        return integration_gateway.ingest_attempt(payload)
 
     def assign_goal(self, payload: GoalAssignmentRequest) -> Goal:
         child = store.children[payload.child_id]

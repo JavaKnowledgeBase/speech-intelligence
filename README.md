@@ -20,6 +20,7 @@ than by passive recognition of words or text.
 ## What is built
 
 - an expert-routed therapy orchestrator in `app/agentic.py`
+- a dedicated integration gateway for output filtering, vectors, environment checks, and attempt ingestion in `app/integrations.py`
 - provider boundaries, agent graph, and runtime provider status in `app/providers.py`
 - repository access for curriculum, vectors, and environment standards in `app/repositories.py`
 - workflow queue handling for caregiver and clinician handoffs in `app/workflows.py`
@@ -78,6 +79,7 @@ The system also now has first-pass support for:
 - multimodal reference vectors
 - child attempt vectors
 - simple nearest-reference matching
+- request-based attempt ingestion through a stable integration contract
 
 ## Recommended external stack
 
@@ -111,6 +113,7 @@ uvicorn app.main:app --reload
 - `GET /curriculum`
 - `GET /vectors/references?target_id=target-b`
 - `GET /vectors/attempts?child_id=child-1`
+- `POST /vectors/attempts`
 - `GET /vectors/match?target_id=target-b&modality=audio&embedding=0.9,0.1,0.3,0.4`
 - `POST /session/start`
 - `POST /speech/input`
