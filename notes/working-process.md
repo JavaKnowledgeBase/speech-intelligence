@@ -1,5 +1,26 @@
 # Working Process
 
+## Core purpose
+
+The purpose is to encourage the child to speak.
+
+The goal is not mainly to familiarize the child with words or texts.
+
+This means the system should optimize for:
+
+- spoken output
+- imitation attempts
+- confidence to vocalize
+- repeated speech production
+- low-pressure speaking practice
+
+It should not drift into becoming mostly:
+
+- a vocabulary familiarization app
+- a reading app
+- a text-learning app
+- a passive content player
+
 ## Core training idea
 
 We try 20 words for 1 month.
@@ -151,6 +172,7 @@ For MVP:
 - pass all child-facing and parent-facing output through the empathy/output-filter layer
 - capture environment notes and compare them against the expected session standard
 - make the child experience usable on tablet, TV, and desktop
+- prioritize speaking attempts over text familiarity
 
 ## Long-term interpretation
 

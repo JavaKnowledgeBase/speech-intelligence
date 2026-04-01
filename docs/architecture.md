@@ -4,6 +4,23 @@
 
 TalkBuddy should be built as an expert-routed agentic platform with human oversight, not as a single LLM app.
 
+## Core purpose
+
+The core purpose is to encourage the child to speak.
+
+The product should optimize for:
+
+- spoken attempts
+- imitation
+- vocal confidence
+- repeated speech production
+
+It should not drift into being mainly:
+
+- a vocabulary familiarization app
+- a text familiarity tool
+- a passive reading or viewing experience
+
 The child session should be handled by a conductor agent that consults narrow experts:
 
 - speech scoring expert

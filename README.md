@@ -2,6 +2,21 @@
 
 This starter is now architected as an agentic system, not a plain CRUD backend.
 
+## Core purpose
+
+The product's purpose is to encourage the child to speak.
+
+It should not drift into being mainly a word-familiarization or text-familiarization app.
+
+Success should be measured more by:
+
+- speaking attempts
+- vocal imitation
+- speaking confidence
+- repeated speech production
+
+than by passive recognition of words or text.
+
 ## What is built
 
 - an expert-routed therapy orchestrator in `app/agentic.py`
