@@ -358,3 +358,31 @@ class EnterpriseUsage(BaseModel):
     active_sessions: int
     total_alerts: int
     average_mastery: float
+
+
+class ChildAnalytics(BaseModel):
+    child_id: str
+    child_name: str
+    total_sessions: int
+    completed_sessions: int
+    escalated_sessions: int
+    total_attempts: int
+    successful_attempts: int
+    overall_mastery: float
+    targets_practiced: int
+    targets_mastered: int
+    streak_days: int
+    top_targets: list[ProgressSnapshot]
+    recent_trend: Literal["improving", "stable", "needs_support"]
+
+
+class EnterpriseAnalytics(BaseModel):
+    total_children: int
+    total_sessions: int
+    completed_sessions: int
+    escalated_sessions: int
+    average_mastery: float
+    total_alerts: int
+    unacknowledged_alerts: int
+    total_reviews: int
+    children_needing_support: int

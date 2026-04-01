@@ -1,20 +1,26 @@
 from __future__ import annotations
 
+from contextlib import asynccontextmanager
+
 from fastapi import FastAPI, HTTPException, Query
 
 from app.agentic import orchestrator
 from app.data import store
+from app.db import persistence
+from app.db.client import db
 from app.models import (
     Alert,
     AlertAcknowledgeResponse,
     AgentGraph,
     ArchitectureBlueprint,
     AttemptIngestionRequest,
+    ChildAnalytics,
     ChildAttemptVector,
     ChildProfile,
     ChildReport,
     ClinicianReviewItem,
     CommunicationProfile,
+    EnterpriseAnalytics,
     EnterpriseUsage,
     EnvironmentCheckRequest,
     EnvironmentCheckResult,
@@ -38,10 +44,29 @@ from app.models import (
 )
 
 
+@asynccontextmanager
+async def lifespan(application: FastAPI):
+    """Hydrate in-memory store from Supabase on startup when configured."""
+    if db.enabled():
+        for child_id in list(store.children.keys()):
+            progress = persistence.load_progress_for_child(child_id)
+            store.progress.update(progress)
+            for session in persistence.load_sessions_for_child(child_id):
+                store.sessions[session.session_id] = session
+        for alert in persistence.load_alerts():
+            store.alerts[alert.alert_id] = alert
+    yield
+
+
 app = FastAPI(
-    title="TalkBuddy AI MVP",
-    version="0.7.0",
-    description="Agentic speech therapy MVP with profile-aware output filtering, environment-aware session start, workflow queues, and curriculum/vector scaffolding.",
+    title="TalkBuddy AI",
+    version="0.8.0",
+    description=(
+        "Agentic speech therapy platform with Supabase-backed persistence, "
+        "profile-aware output filtering, environment-aware sessions, "
+        "multimodal attempt ingestion, and analytics."
+    ),
+    lifespan=lifespan,
 )
 
 
@@ -214,3 +239,18 @@ def child_report(child_id: str) -> ChildReport:
 @app.get("/enterprise/usage", response_model=EnterpriseUsage)
 def get_enterprise_usage() -> EnterpriseUsage:
     return orchestrator.enterprise_usage()
+
+
+# ── Analytics ─────────────────────────────────────────────────────────────────
+
+
+@app.get("/analytics/child/{child_id}", response_model=ChildAnalytics)
+def child_analytics(child_id: str) -> ChildAnalytics:
+    if child_id not in store.children:
+        raise HTTPException(status_code=404, detail="Child not found")
+    return orchestrator.child_analytics(child_id)
+
+
+@app.get("/analytics/enterprise", response_model=EnterpriseAnalytics)
+def enterprise_analytics() -> EnterpriseAnalytics:
+    return orchestrator.enterprise_analytics()

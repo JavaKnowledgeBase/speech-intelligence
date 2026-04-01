@@ -4,6 +4,7 @@ from datetime import datetime
 from uuid import uuid4
 
 from app.data import store
+from app.db import persistence
 from app.models import Alert, AlertAcknowledgeResponse, ClinicianReviewItem, WorkflowQueueSnapshot
 
 
@@ -23,6 +24,7 @@ class WorkflowManager:
             created_at=datetime.utcnow(),
         )
         self.clinician_reviews[review.review_id] = review
+        persistence.upsert_review(review)
         return review
 
     def snapshot(self) -> WorkflowQueueSnapshot:
@@ -46,6 +48,7 @@ class WorkflowManager:
     def acknowledge_alert(self, alert_id: str) -> AlertAcknowledgeResponse:
         alert = store.alerts[alert_id]
         alert.acknowledged = True
+        persistence.acknowledge_alert(alert_id)
         review = self.enqueue_clinician_review(
             child_id=alert.child_id,
             session_id=alert.session_id,

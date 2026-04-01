@@ -4,6 +4,7 @@ from datetime import datetime
 from uuid import uuid4
 
 from app.data import store
+from app.db import persistence
 from app.integrations import integration_gateway
 from app.models import (
     Alert,
@@ -11,10 +12,12 @@ from app.models import (
     AgentGraph,
     ArchitectureBlueprint,
     AttemptIngestionRequest,
+    ChildAnalytics,
     ChildAttemptVector,
     ChildProfile,
     ChildReport,
     CommunicationProfile,
+    EnterpriseAnalytics,
     EnterpriseUsage,
     EnvironmentCheckRequest,
     EnvironmentCheckResult,
@@ -112,6 +115,7 @@ class TherapyOrchestrator:
         if parent_message:
             session.events.append(SessionEvent(timestamp=datetime.utcnow(), kind="environment_parent_message", detail=parent_message))
         store.sessions[session_id] = session
+        persistence.upsert_session(session)
         return SessionStartResponse(
             session_id=session_id,
             child_id=child_id,
@@ -133,6 +137,7 @@ class TherapyOrchestrator:
         snapshot.mastery_score = round(snapshot.successes / snapshot.attempts, 2)
         snapshot.last_practiced_at = datetime.utcnow()
         store.progress[key] = snapshot
+        persistence.upsert_progress(child_id, snapshot)
         return snapshot
 
     def _create_alert(self, session: SessionState, reason: str, message: str) -> tuple[Alert, list]:
@@ -140,6 +145,7 @@ class TherapyOrchestrator:
         filtered_message, filter_trace = self._filter_output("parent", message, owner_id=child.caregiver_id)
         alert = Alert(alert_id=f"alert-{uuid4().hex[:8]}", session_id=session.session_id, child_id=session.child_id, caregiver_id=child.caregiver_id, reason=reason, message=filtered_message.text, created_at=datetime.utcnow())
         store.alerts[alert.alert_id] = alert
+        persistence.upsert_alert(alert)
         session.events.append(SessionEvent(timestamp=datetime.utcnow(), kind="alert_created", detail=filtered_message.text))
         session.events.append(SessionEvent(timestamp=datetime.utcnow(), kind="output_filter_trace", detail=filter_trace[0].summary))
         return alert, filter_trace
@@ -171,6 +177,7 @@ class TherapyOrchestrator:
                 detail=f"Stored attempt {attempt.attempt_id} with top match {attempt.top_match_reference_id or 'none'} at similarity {attempt.cosine_similarity:.2f}",
             )
         )
+        persistence.upsert_attempt_vector(attempt)
 
         if success:
             self._update_progress(session.child_id, attempted_target, success=True)
@@ -265,6 +272,7 @@ class TherapyOrchestrator:
         session = store.sessions[session_id]
         session.status = "completed" if session.status == "active" else session.status
         session.events.append(SessionEvent(timestamp=datetime.utcnow(), kind="session_completed", detail="Session closed by API."))
+        persistence.upsert_session(session)
         return SessionCompletionResponse(session_id=session_id, status=session.status, reward_points=session.reward_points, total_events=len(session.events))
 
     def caregiver_alerts(self, caregiver_id: str) -> list[Alert]:
@@ -292,6 +300,85 @@ class TherapyOrchestrator:
 
     def provider_statuses(self) -> list[ProviderStatus]:
         return ProviderCatalog.statuses()
+
+    # ── Analytics ─────────────────────────────────────────────────────────────
+
+    def child_analytics(self, child_id: str) -> ChildAnalytics:
+        child = store.children[child_id]
+        progress = [s for key, s in store.progress.items() if key[0] == child_id]
+        sessions = [s for s in store.sessions.values() if s.child_id == child_id]
+        attempts = store.attempt_vectors.get(child_id, [])
+
+        total_sessions = len(sessions)
+        completed = sum(1 for s in sessions if s.status == "completed")
+        escalated = sum(1 for s in sessions if s.status == "escalated")
+        total_attempts = sum(s.attempts for s in progress)
+        successes = sum(s.successes for s in progress)
+        targets_mastered = sum(1 for s in progress if s.mastery_score >= 0.8)
+
+        mastery_scores = [s.mastery_score for s in progress]
+        overall = round(sum(mastery_scores) / len(mastery_scores), 2) if mastery_scores else 0.0
+
+        # Trend: compare recent attempts against older attempts using attempt vectors
+        if len(attempts) >= 6:
+            recent_half = attempts[-len(attempts) // 2 :]
+            older_half = attempts[: len(attempts) // 2]
+            recent_rate = sum(1 for a in recent_half if a.success_flag) / len(recent_half)
+            older_rate = sum(1 for a in older_half if a.success_flag) / len(older_half)
+            if recent_rate > older_rate + 0.1:
+                trend = "improving"
+            elif recent_rate < older_rate - 0.1:
+                trend = "needs_support"
+            else:
+                trend = "stable"
+        elif overall >= 0.7:
+            trend = "improving"
+        elif overall <= 0.4:
+            trend = "needs_support"
+        else:
+            trend = "stable"
+
+        top_targets = sorted(progress, key=lambda s: s.mastery_score, reverse=True)[:5]
+
+        return ChildAnalytics(
+            child_id=child_id,
+            child_name=child.name,
+            total_sessions=total_sessions,
+            completed_sessions=completed,
+            escalated_sessions=escalated,
+            total_attempts=total_attempts,
+            successful_attempts=successes,
+            overall_mastery=overall,
+            targets_practiced=len(progress),
+            targets_mastered=targets_mastered,
+            streak_days=child.streak_days,
+            top_targets=top_targets,
+            recent_trend=trend,
+        )
+
+    def enterprise_analytics(self) -> EnterpriseAnalytics:
+        all_sessions = list(store.sessions.values())
+        all_alerts = list(store.alerts.values())
+        mastery_scores = [s.mastery_score for s in store.progress.values()]
+        needs_support = sum(
+            1 for child_id in store.children
+            if any(
+                s.mastery_score < 0.4
+                for key, s in store.progress.items()
+                if key[0] == child_id
+            )
+        )
+        return EnterpriseAnalytics(
+            total_children=len(store.children),
+            total_sessions=len(all_sessions),
+            completed_sessions=sum(1 for s in all_sessions if s.status == "completed"),
+            escalated_sessions=sum(1 for s in all_sessions if s.status == "escalated"),
+            average_mastery=round(sum(mastery_scores) / len(mastery_scores), 2) if mastery_scores else 0.0,
+            total_alerts=len(all_alerts),
+            unacknowledged_alerts=sum(1 for a in all_alerts if not a.acknowledged),
+            total_reviews=len(workflow_manager.clinician_reviews),
+            children_needing_support=needs_support,
+        )
 
 
 orchestrator = TherapyOrchestrator()

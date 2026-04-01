@@ -15,11 +15,16 @@ class Settings:
     temporal_host: str = os.getenv("TEMPORAL_HOST", "")
     supabase_url: str = os.getenv("SUPABASE_URL", "")
     supabase_service_role_key: str = os.getenv("SUPABASE_SERVICE_ROLE_KEY", "")
+    supabase_repository_mode: str = os.getenv("SUPABASE_REPOSITORY_MODE", "auto")
     clerk_secret_key: str = os.getenv("CLERK_SECRET_KEY", "")
     use_live_provider_calls: bool = os.getenv("USE_LIVE_PROVIDER_CALLS", "false").lower() == "true"
 
     def configured(self, value: str) -> bool:
         return bool(value and value.strip())
+
+    @property
+    def supabase_configured(self) -> bool:
+        return self.configured(self.supabase_url) and self.configured(self.supabase_service_role_key)
 
 
 settings = Settings()
