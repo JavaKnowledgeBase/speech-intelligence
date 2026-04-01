@@ -28,6 +28,7 @@ from app.models import (
     SessionCompletionResponse,
     SessionDetail,
     SessionEvent,
+    SessionStartRequest,
     SessionStartResponse,
     SessionState,
     SpeechEvaluation,
@@ -76,21 +77,59 @@ class TherapyOrchestrator:
         mastery = self._progress_for(child.child_id, chosen.target_text).mastery_score
         return chosen, mastery
 
-    def start_session(self, child_id: str) -> SessionStartResponse:
+    def start_session(self, payload: SessionStartRequest) -> SessionStartResponse:
+        child_id = payload.child_id
         child = store.children[child_id]
         goal, mastery = self.choose_next_goal(child)
         planner_trace = self.planner_expert.explain_goal_choice(goal.target_text, mastery)
         workflow_trace = self.workflow_expert.record("Session workflow opened and ready for event streaming.")
-        environment_profile = self.environment_profile(child_id)
-        environment_ok = environment_profile is not None
+
+        environment_ok = self.environment_profile(child_id) is not None
         environment_note = None if environment_ok else "No environment baseline yet. Ask parent for a 360 degree room photo."
+        parent_message = None
+        environment_result = None
+        if payload.environment is not None:
+            environment_result = self.check_environment(payload.environment)
+            environment_ok = environment_result.matches_standard
+            if not environment_result.matches_standard:
+                environment_note = "; ".join(environment_result.alerts) if environment_result.alerts else "Room setup needs adjustment before starting."
+                parent_text = "Please adjust the room before starting. " + " ".join(environment_result.recommended_adjustments[:2])
+                filtered_parent, _ = self._filter_output("parent", parent_text, owner_id=child.caregiver_id)
+                parent_message = filtered_parent.text
+            else:
+                environment_note = "Environment matches the child's saved comfort standard."
+
         filtered_message, filter_trace = self._filter_output("child", f"Let's practice {goal.target_text} with a short, playful repetition round", owner_id=child_id)
         session_id = f"session-{uuid4().hex[:10]}"
-        session = SessionState(session_id=session_id, child_id=child_id, started_at=datetime.utcnow(), current_goal_id=goal.goal_id, current_target=goal.target_text, events=[SessionEvent(timestamp=datetime.utcnow(), kind="session_started", detail=f"Started target {goal.target_text}"), SessionEvent(timestamp=datetime.utcnow(), kind="planner_trace", detail=planner_trace.summary), SessionEvent(timestamp=datetime.utcnow(), kind="workflow_trace", detail=workflow_trace.summary), SessionEvent(timestamp=datetime.utcnow(), kind="output_filter_trace", detail=filter_trace[0].summary)])
+        session = SessionState(
+            session_id=session_id,
+            child_id=child_id,
+            started_at=datetime.utcnow(),
+            current_goal_id=goal.goal_id,
+            current_target=goal.target_text,
+            events=[
+                SessionEvent(timestamp=datetime.utcnow(), kind="session_started", detail=f"Started target {goal.target_text}"),
+                SessionEvent(timestamp=datetime.utcnow(), kind="planner_trace", detail=planner_trace.summary),
+                SessionEvent(timestamp=datetime.utcnow(), kind="workflow_trace", detail=workflow_trace.summary),
+                SessionEvent(timestamp=datetime.utcnow(), kind="output_filter_trace", detail=filter_trace[0].summary),
+            ],
+        )
         if environment_note:
             session.events.append(SessionEvent(timestamp=datetime.utcnow(), kind="environment_note", detail=environment_note))
+        if parent_message:
+            session.events.append(SessionEvent(timestamp=datetime.utcnow(), kind="environment_parent_message", detail=parent_message))
         store.sessions[session_id] = session
-        return SessionStartResponse(session_id=session_id, child_id=child_id, target_text=goal.target_text, cue=goal.cue, message=filtered_message.text, assigned_agents=["session_conductor", "speech_scoring_expert", "engagement_expert", "care_plan_expert", "workflow_expert", "reporting_expert", "output_filter_expert", "environment_expert"], environment_ok=environment_ok, environment_note=environment_note)
+        return SessionStartResponse(
+            session_id=session_id,
+            child_id=child_id,
+            target_text=goal.target_text,
+            cue=goal.cue,
+            message=filtered_message.text,
+            assigned_agents=["session_conductor", "speech_scoring_expert", "engagement_expert", "care_plan_expert", "workflow_expert", "reporting_expert", "output_filter_expert", "environment_expert"],
+            environment_ok=environment_ok,
+            environment_note=environment_note,
+            parent_message=parent_message,
+        )
 
     def _update_progress(self, child_id: str, target_text: str, success: bool) -> ProgressSnapshot:
         key = (child_id, target_text)

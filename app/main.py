@@ -39,8 +39,8 @@ from app.models import (
 
 app = FastAPI(
     title="TalkBuddy AI MVP",
-    version="0.6.0",
-    description="Agentic speech therapy MVP with output filtering, environment checks, workflow queues, and curriculum/vector scaffolding.",
+    version="0.7.0",
+    description="Agentic speech therapy MVP with profile-aware output filtering, environment-aware session start, workflow queues, and curriculum/vector scaffolding.",
 )
 
 
@@ -125,7 +125,7 @@ def get_children() -> list[ChildProfile]:
 def create_session(payload: SessionStartRequest) -> SessionStartResponse:
     if payload.child_id not in store.children:
         raise HTTPException(status_code=404, detail="Child not found")
-    return orchestrator.start_session(payload.child_id)
+    return orchestrator.start_session(payload)
 
 
 @app.get("/sessions/{session_id}", response_model=SessionDetail)

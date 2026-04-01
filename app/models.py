@@ -239,6 +239,7 @@ class ArchitectureBlueprint(BaseModel):
 
 class SessionStartRequest(BaseModel):
     child_id: str
+    environment: EnvironmentCheckRequest | None = None
 
 
 class SessionStartResponse(BaseModel):
@@ -250,6 +251,7 @@ class SessionStartResponse(BaseModel):
     assigned_agents: list[str]
     environment_ok: bool = True
     environment_note: str | None = None
+    parent_message: str | None = None
 
 
 class SpeechInputRequest(BaseModel):

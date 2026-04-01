@@ -39,11 +39,12 @@ The system also now has first-pass support for:
 - child communication profiles
 - parent communication profiles
 - environment standards per child
+- session-start environment checks
+- calm parent adjustment guidance when the room is off-standard
 - curriculum targets for the month-one program
 - multimodal reference vectors
 - child attempt vectors
 - simple nearest-reference matching
-- simple environment-standard checking
 
 ## Recommended external stack
 
@@ -78,17 +79,15 @@ uvicorn app.main:app --reload
 - `GET /vectors/references?target_id=target-b`
 - `GET /vectors/attempts?child_id=child-1`
 - `GET /vectors/match?target_id=target-b&modality=audio&embedding=0.9,0.1,0.3,0.4`
-- `GET /children`
 - `POST /session/start`
-- `GET /sessions/{session_id}`
-- `POST /sessions/{session_id}/complete`
 - `POST /speech/input`
 - `GET /caregiver/alerts?caregiver_id=caregiver-1`
-- `POST /caregiver/alerts/{alert_id}/acknowledge`
 - `GET /clinician/queue?clinician_id=slp-1`
-- `GET /workflows/queues`
-- `GET /reports/child/child-1`
 - `GET /enterprise/usage`
+
+## Session start shape
+
+`POST /session/start` can now include an optional environment snapshot. If the room looks off-standard, the response includes a calm parent-facing adjustment message before therapy begins.
 
 ## Immediate next implementation slice
 
