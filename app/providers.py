@@ -4,25 +4,150 @@ from app.config import settings
 from app.models import AgentEdge, AgentGraph, AgentNode, ArchitectureBlueprint, CommunicationProfile, ExpertDecision, FilteredMessage, ProviderComponent, ProviderStatus
 
 
+# ── Levenshtein distance (no dependencies) ────────────────────────────────────
+
+def _levenshtein(a: str, b: str) -> int:
+    if not a:
+        return len(b)
+    if not b:
+        return len(a)
+    dp = list(range(len(b) + 1))
+    for i, ca in enumerate(a, 1):
+        prev, dp[0] = dp[0], i
+        for j, cb in enumerate(b, 1):
+            temp = dp[j]
+            dp[j] = prev if ca == cb else 1 + min(prev, dp[j], dp[j - 1])
+            prev = temp
+    return dp[len(b)]
+
+
+def _char_similarity(a: str, b: str) -> float:
+    if not a and not b:
+        return 1.0
+    if not a or not b:
+        return 0.0
+    return 1.0 - _levenshtein(a, b) / max(len(a), len(b))
+
+
+def _phonetic_key(word: str) -> str:
+    """Minimal soundex-style key for phonetic grouping (no deps).
+
+    Sufficient for child single-word speech targets (CVC and CVCV words).
+    Not a standards-compliant implementation — built for speed in the hot path.
+    """
+    w = word.lower().strip()
+    if not w:
+        return ""
+    # Remove non-alpha
+    w = "".join(c for c in w if c.isalpha())
+    if not w:
+        return ""
+    codes = {
+        "bfpv": "1", "cgjkqsxyz": "2", "dt": "3", "l": "4", "mn": "5", "r": "6"
+    }
+    key = w[0]
+    last = ""
+    for ch in w[1:]:
+        code = next((v for k, v in codes.items() if ch in k), "0")
+        if code != "0" and code != last:
+            key += code
+        last = code
+    return key[:4].ljust(4, "0")
+
+
+def _openai_score(expected: str, heard: str) -> float | None:
+    """Call OpenAI to assess whether the child correctly produced the target.
+
+    Returns a pronunciation score (0–1) or None on failure.
+    Only called when OPENAI_API_KEY + USE_LIVE_PROVIDER_CALLS are set.
+    Uses a minimal prompt to keep latency low (gpt-4o-mini is ~200ms p50).
+    """
+    if not settings.use_live_provider_calls or not settings.configured(settings.openai_api_key):
+        return None
+    try:
+        import httpx
+        payload = {
+            "model": "gpt-4o-mini",
+            "max_output_tokens": 10,
+            "input": [
+                {
+                    "role": "system",
+                    "content": (
+                        "You are a speech-language pathologist assistant. "
+                        "A child attempted to say a target word. "
+                        "Return ONLY a decimal score from 0.00 to 1.00 indicating how well "
+                        "the transcribed speech matches the target. "
+                        "1.00 = exact or phonetically correct. "
+                        "0.00 = completely wrong. No other text."
+                    ),
+                },
+                {
+                    "role": "user",
+                    "content": f'Target: "{expected}". Child said: "{heard}".',
+                },
+            ],
+        }
+        with httpx.Client(timeout=8.0) as client:
+            resp = client.post(
+                "https://api.openai.com/v1/responses",
+                headers={"Authorization": f"Bearer {settings.openai_api_key}"},
+                json=payload,
+            )
+            resp.raise_for_status()
+            data = resp.json()
+            # Responses API: output[0].content[0].text
+            text = data["output"][0]["content"][0]["text"].strip()
+            return max(0.0, min(1.0, float(text)))
+    except Exception:
+        return None
+
+
 class SpeechExpert:
     provider_name = "Deepgram Nova / Flux"
 
     def evaluate(self, expected_text: str, transcript: str) -> tuple[float, ExpertDecision]:
         expected = expected_text.strip().lower()
         heard = transcript.strip().lower()
+
+        # Try OpenAI scoring first (better phoneme awareness)
+        ai_score = _openai_score(expected, heard)
+        if ai_score is not None:
+            summary = (
+                f"OpenAI scored the attempt at {ai_score:.2f} for target '{expected_text}'."
+            )
+            return ai_score, ExpertDecision(
+                expert="speech_scoring_expert",
+                provider="OpenAI gpt-4o-mini",
+                confidence=round(ai_score, 2),
+                summary=summary,
+            )
+
+        # Local fallback: character similarity + phonetic key match
+        char_sim = _char_similarity(expected, heard)
+        phonetic_match = _phonetic_key(expected) == _phonetic_key(heard)
+
         if heard == expected:
             score = 0.96
-            summary = f"Strong match for target '{expected_text}'."
-        elif expected in heard or heard in expected:
-            score = 0.72
-            summary = f"Partial lexical match for '{expected_text}'."
-        elif heard and expected and heard[0] == expected[0]:
-            score = 0.55
-            summary = f"Initial phoneme aligns with '{expected_text}', but confidence is moderate."
+            summary = f"Exact lexical match for target '{expected_text}'."
+        elif char_sim >= 0.85 or phonetic_match:
+            score = round(0.7 + (char_sim * 0.25), 2)
+            summary = f"Strong phonetic match for '{expected_text}' (char sim {char_sim:.2f}, phonetic {'✓' if phonetic_match else '✗'})."
+        elif char_sim >= 0.55 or (heard and expected and heard[0] == expected[0]):
+            score = round(0.45 + (char_sim * 0.3), 2)
+            summary = f"Partial match for '{expected_text}' (char sim {char_sim:.2f})."
+        elif heard:
+            score = round(max(0.1, char_sim * 0.5), 2)
+            summary = f"Weak alignment with target '{expected_text}' (char sim {char_sim:.2f})."
         else:
-            score = 0.24
-            summary = f"Weak alignment with target '{expected_text}'."
-        return score, ExpertDecision(expert="speech_scoring_expert", provider=self.provider_name, confidence=round(score, 2), summary=summary)
+            score = 0.0
+            summary = f"No speech detected for target '{expected_text}'."
+
+        return score, ExpertDecision(
+            expert="speech_scoring_expert",
+            provider=self.provider_name,
+            confidence=round(score, 2),
+            summary=summary,
+        )
 
 
 class EngagementExpert:
@@ -36,21 +161,109 @@ class EngagementExpert:
             summary = "Engagement is softening; use reward or cueing before escalating."
         else:
             summary = "Engagement is low; consider caregiver intervention or a break."
-        return engagement, ExpertDecision(expert="engagement_expert", provider=self.provider_name, confidence=engagement, summary=summary)
+        return engagement, ExpertDecision(
+            expert="engagement_expert",
+            provider=self.provider_name,
+            confidence=engagement,
+            summary=summary,
+        )
 
 
 class ReasoningExpert:
     provider_name = "OpenAI Responses API"
 
-    def decide(self, pronunciation_score: float, engagement_score: float, retries_used: int, max_retries: int) -> ExpertDecision:
-        confidence = max(0.0, min(1.0, (pronunciation_score * 0.7) + (engagement_score * 0.3) - min(retries_used * 0.08, 0.2)))
+    def decide(
+        self,
+        pronunciation_score: float,
+        engagement_score: float,
+        retries_used: int,
+        max_retries: int,
+    ) -> ExpertDecision:
+        # Try OpenAI Responses API for richer conductor reasoning
+        ai_decision = self._openai_decide(
+            pronunciation_score, engagement_score, retries_used, max_retries
+        )
+        if ai_decision is not None:
+            return ai_decision
+
+        # Local fallback: weighted formula
+        confidence = max(
+            0.0,
+            min(
+                1.0,
+                (pronunciation_score * 0.7) + (engagement_score * 0.3) - min(retries_used * 0.08, 0.2),
+            ),
+        )
         if pronunciation_score >= 0.9 and engagement_score >= 0.55:
             summary = "Advance to the next exercise. Confidence is high enough for autonomous progression."
         elif confidence >= 0.58 and retries_used < max_retries:
             summary = "Retry with scaffolding. The child may still succeed with another cue."
         else:
             summary = "Escalate. The system should not reinforce this turn without human support."
-        return ExpertDecision(expert="session_conductor", provider=self.provider_name, confidence=round(confidence, 2), summary=summary)
+        return ExpertDecision(
+            expert="session_conductor",
+            provider=self.provider_name,
+            confidence=round(confidence, 2),
+            summary=summary,
+        )
+
+    def _openai_decide(
+        self,
+        pronunciation_score: float,
+        engagement_score: float,
+        retries_used: int,
+        max_retries: int,
+    ) -> ExpertDecision | None:
+        if not settings.use_live_provider_calls or not settings.configured(settings.openai_api_key):
+            return None
+        try:
+            import httpx
+
+            payload = {
+                "model": "gpt-4o-mini",
+                "max_output_tokens": 80,
+                "input": [
+                    {
+                        "role": "system",
+                        "content": (
+                            "You are the session conductor for a pediatric speech therapy AI. "
+                            "Given the metrics below, decide whether to: advance (child succeeded), "
+                            "retry (child needs another try), or escalate (human caregiver needed). "
+                            "Respond in JSON only: "
+                            '{{"action": "advance"|"retry"|"escalate", "confidence": 0.00-1.00, "reason": "short reason"}}'
+                        ),
+                    },
+                    {
+                        "role": "user",
+                        "content": (
+                            f"pronunciation_score={pronunciation_score:.2f} "
+                            f"engagement_score={engagement_score:.2f} "
+                            f"retries_used={retries_used} max_retries={max_retries}"
+                        ),
+                    },
+                ],
+            }
+            with httpx.Client(timeout=8.0) as client:
+                resp = client.post(
+                    "https://api.openai.com/v1/responses",
+                    headers={"Authorization": f"Bearer {settings.openai_api_key}"},
+                    json=payload,
+                )
+                resp.raise_for_status()
+                data = resp.json()
+                import json
+                text = data["output"][0]["content"][0]["text"].strip()
+                parsed = json.loads(text)
+                confidence = float(parsed.get("confidence", 0.7))
+                reason = parsed.get("reason", "OpenAI conductor decision.")
+                return ExpertDecision(
+                    expert="session_conductor",
+                    provider="OpenAI gpt-4o-mini",
+                    confidence=round(confidence, 2),
+                    summary=reason,
+                )
+        except Exception:
+            return None
 
 
 class PlannerExpert:
@@ -58,7 +271,12 @@ class PlannerExpert:
 
     def explain_goal_choice(self, target_text: str, mastery_score: float) -> ExpertDecision:
         gap = round(1 - mastery_score, 2)
-        return ExpertDecision(expert="care_plan_expert", provider=self.provider_name, confidence=max(0.5, gap), summary=f"Selected '{target_text}' because it has the largest remaining mastery gap.")
+        return ExpertDecision(
+            expert="care_plan_expert",
+            provider=self.provider_name,
+            confidence=max(0.5, gap),
+            summary=f"Selected '{target_text}' because it has the largest remaining mastery gap.",
+        )
 
 
 class WorkflowExpert:
@@ -71,9 +289,93 @@ class WorkflowExpert:
 class OutputFilterExpert:
     provider_name = "OpenAI Responses API or custom empathy layer"
 
-    def filter_text(self, audience: str, text: str, profile: CommunicationProfile | None = None) -> tuple[FilteredMessage, ExpertDecision]:
+    def filter_text(
+        self,
+        audience: str,
+        text: str,
+        profile: CommunicationProfile | None = None,
+    ) -> tuple[FilteredMessage, ExpertDecision]:
+        # Try OpenAI for context-aware, profile-informed message generation
+        ai_result = self._openai_filter(audience, text, profile)
+        if ai_result is not None:
+            return ai_result
+
+        # Local rule-based fallback
+        return self._local_filter(audience, text, profile)
+
+    def _openai_filter(
+        self,
+        audience: str,
+        text: str,
+        profile: CommunicationProfile | None,
+    ) -> tuple[FilteredMessage, ExpertDecision] | None:
+        if not settings.use_live_provider_calls or not settings.configured(settings.openai_api_key):
+            return None
+        try:
+            import httpx
+
+            limit = 90 if audience == "child" else 140
+            calmness = "maximum calmness, no exclamations"
+            if profile is not None:
+                limit = profile.policy.verbosity_limit
+                if profile.policy.calmness_level >= 4:
+                    calmness = "very calm, peaceful, no exclamations"
+
+            system_prompt = (
+                f"You are an output filter for a pediatric speech therapy app. "
+                f"Rewrite the message for the {audience} audience. "
+                f"Rules: {calmness}, under {limit} characters, no diagnosis language, "
+                f"no exclamation marks, simple words a child can understand if audience is child. "
+                f"Return ONLY the rewritten message text, nothing else."
+            )
+
+            payload = {
+                "model": "gpt-4o-mini",
+                "max_output_tokens": 60,
+                "input": [
+                    {"role": "system", "content": system_prompt},
+                    {"role": "user", "content": text},
+                ],
+            }
+            with httpx.Client(timeout=6.0) as client:
+                resp = client.post(
+                    "https://api.openai.com/v1/responses",
+                    headers={"Authorization": f"Bearer {settings.openai_api_key}"},
+                    json=payload,
+                )
+                resp.raise_for_status()
+                data = resp.json()
+                filtered_text = data["output"][0]["content"][0]["text"].strip()
+
+            style_tags = ["ai-filtered", "calm", "profile-aware" if profile else "default"]
+            return FilteredMessage(
+                audience=audience,
+                text=filtered_text,
+                style_tags=style_tags,
+            ), ExpertDecision(
+                expert="output_filter_expert",
+                provider="OpenAI gpt-4o-mini",
+                confidence=0.95,
+                summary=f"OpenAI rewrote {audience} output using calmness rules ({calmness}).",
+            )
+        except Exception:
+            return None
+
+    def _local_filter(
+        self,
+        audience: str,
+        text: str,
+        profile: CommunicationProfile | None,
+    ) -> tuple[FilteredMessage, ExpertDecision]:
         cleaned = " ".join(text.strip().split())
-        replacements = {"Please": "Please calmly", "Let's": "Let us", "!": ".", "very": "", "really": "", "right now": "now"}
+        replacements = {
+            "Please": "Please calmly",
+            "Let's": "Let us",
+            "!": ".",
+            "very": "",
+            "really": "",
+            "right now": "now",
+        }
         for old, new in replacements.items():
             cleaned = cleaned.replace(old, new)
         style_tags = ["calm", "constructive"]
@@ -98,7 +400,16 @@ class OutputFilterExpert:
             style_tags.extend(["gentle", "brief"])
         else:
             style_tags.extend(["clear", "supportive"])
-        return FilteredMessage(audience=audience, text=cleaned.strip(), style_tags=list(dict.fromkeys(style_tags))), ExpertDecision(expert="output_filter_expert", provider=self.provider_name, confidence=0.92 if profile else 0.88, summary=f"Filtered {audience} output using {'profile-aware' if profile else 'default'} calmness policy.")
+        return FilteredMessage(
+            audience=audience,
+            text=cleaned.strip(),
+            style_tags=list(dict.fromkeys(style_tags)),
+        ), ExpertDecision(
+            expert="output_filter_expert",
+            provider=self.provider_name,
+            confidence=0.92 if profile else 0.88,
+            summary=f"Filtered {audience} output using {'profile-aware' if profile else 'default'} calmness policy.",
+        )
 
 
 class ProviderCatalog:

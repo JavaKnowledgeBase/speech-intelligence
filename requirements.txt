@@ -3,8 +3,11 @@ uvicorn==0.35.0
 pydantic==2.11.7
 supabase>=2.7.4
 
-# Optional — required only when FILTER_SERVICE_URL is set and calls go over HTTP
+# Required for HTTP calls and OpenAI TTS streaming
 httpx>=0.27.0
+
+# Required for Deepgram WebSocket bridge
+websockets>=12.0
 
 # Development / testing
 pytest>=8.0.0

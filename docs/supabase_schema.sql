@@ -160,3 +160,31 @@ create table progress_snapshots (
   last_practiced_at timestamptz,
   unique(child_id, target_text)
 );
+
+-- Voice runtime audit tables
+-- Required for full session auditability (medical record trail).
+
+create table voice_transcripts (
+  id uuid primary key default gen_random_uuid(),
+  session_id uuid references sessions(id) on delete cascade,
+  transcript text not null,
+  is_final boolean not null default false,
+  elapsed_ms integer not null default 0,
+  attention_score numeric(5,2),
+  confidence numeric(5,4),
+  source text not null default 'unknown',
+  created_at timestamptz not null default now()
+);
+
+create index voice_transcripts_session_idx on voice_transcripts(session_id, created_at);
+
+create table voice_checkpoints (
+  id uuid primary key default gen_random_uuid(),
+  session_id uuid references sessions(id) on delete cascade,
+  checkpoint_kind text not null,
+  elapsed_ms integer not null default 0,
+  detail text,
+  created_at timestamptz not null default now()
+);
+
+create index voice_checkpoints_session_idx on voice_checkpoints(session_id, created_at);

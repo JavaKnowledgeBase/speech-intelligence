@@ -1,12 +1,18 @@
 from __future__ import annotations
 
+import asyncio
+import json
 from contextlib import asynccontextmanager
 from pathlib import Path
 
-from fastapi import FastAPI, HTTPException, Query
-from fastapi.responses import FileResponse
+from fastapi import FastAPI, HTTPException, Query, WebSocket, WebSocketDisconnect
+from fastapi.responses import FileResponse, StreamingResponse
 from fastapi.staticfiles import StaticFiles
 
+import httpx
+
+from app.middleware.auth import ClerkAuthMiddleware
+from app.middleware.observability import ObservabilityMiddleware
 from app.agentic import orchestrator
 from app.data import store
 from app.db import persistence
@@ -104,6 +110,9 @@ app = FastAPI(
     lifespan=lifespan,
 )
 
+app.add_middleware(ObservabilityMiddleware)
+app.add_middleware(ClerkAuthMiddleware)
+
 app.mount("/static", StaticFiles(directory=STATIC_DIR), name="static")
 
 
@@ -112,9 +121,197 @@ def frontend_shell() -> FileResponse:
     return FileResponse(STATIC_DIR / "index.html")
 
 
+@app.get("/therapy", include_in_schema=False)
+def therapy_shell() -> FileResponse:
+    """Child therapy session UI — optimised for tablet and TV."""
+    return FileResponse(STATIC_DIR / "therapy.html")
+
+
 @app.get("/health")
 def health() -> dict[str, str]:
     return {"status": "ok"}
+
+
+@app.get("/runtime/voice/tts/speak", include_in_schema=True)
+async def tts_speak(
+    text: str = Query(..., max_length=1000),
+    voice: str = Query("nova"),
+    session_id: str | None = Query(None),
+) -> StreamingResponse:
+    """Stream synthesised speech audio from OpenAI TTS.
+
+    Available when OPENAI_API_KEY and USE_LIVE_PROVIDER_CALLS=true are set.
+    Falls back to 503 so the browser can use Web Speech Synthesis instead.
+    Supported voices: alloy, echo, fable, onyx, nova, shimmer.
+    """
+    from app.config import settings
+
+    if not settings.use_live_provider_calls or not settings.configured(settings.openai_api_key):
+        raise HTTPException(status_code=503, detail="TTS provider not configured")
+
+    allowed_voices = {"alloy", "echo", "fable", "onyx", "nova", "shimmer"}
+    if voice not in allowed_voices:
+        voice = "nova"
+
+    async def _stream():
+        async with httpx.AsyncClient(timeout=30.0) as client:
+            async with client.stream(
+                "POST",
+                "https://api.openai.com/v1/audio/speech",
+                headers={"Authorization": f"Bearer {settings.openai_api_key}"},
+                json={"model": "tts-1", "input": text, "voice": voice, "response_format": "mp3"},
+            ) as response:
+                if response.status_code != 200:
+                    return
+                async for chunk in response.aiter_bytes(chunk_size=4096):
+                    yield chunk
+
+    return StreamingResponse(
+        _stream(),
+        media_type="audio/mpeg",
+        headers={"Cache-Control": "no-store", "X-Session-Id": session_id or ""},
+    )
+
+
+@app.websocket("/runtime/voice/stream")
+async def deepgram_voice_stream(
+    websocket: WebSocket,
+    session_id: str = Query(...),
+    child_id: str = Query(...),
+) -> None:
+    """WebSocket bridge: browser audio → Deepgram streaming STT → transcript frames.
+
+    Browser sends raw PCM audio chunks (16-bit, 16kHz, mono) as binary messages.
+    Server relays them to Deepgram and forwards transcript JSON frames back.
+    Active when DEEPGRAM_API_KEY and USE_LIVE_PROVIDER_CALLS=true are set.
+    Falls back to immediate close with a 4503 code so the client tries Web Speech API.
+    """
+    from app.config import settings
+
+    if store.sessions.get(session_id) is None or store.children.get(child_id) is None:
+        await websocket.close(code=4404, reason="Session or child not found")
+        return
+
+    if not settings.use_live_provider_calls or not settings.configured(settings.deepgram_api_key):
+        # Signal to browser that Deepgram is unavailable; it falls back to Web Speech API
+        await websocket.accept()
+        await websocket.close(code=4503, reason="Deepgram not configured")
+        return
+
+    await websocket.accept()
+
+    # Browser sends webm/opus via MediaRecorder (native, no transcoding needed).
+    # Deepgram auto-detects the container; we hint with encoding=opus for clarity.
+    dg_url = (
+        "wss://api.deepgram.com/v1/listen"
+        "?model=nova-2-general"
+        "&punctuate=true"
+        "&interim_results=true"
+        "&endpointing=700"
+        "&vad_events=true"
+        "&encoding=opus"
+        "&container=webm"
+        "&channels=1"
+    )
+    dg_headers = {"Authorization": f"Token {settings.deepgram_api_key}"}
+
+    async with httpx.AsyncClient() as http_client:
+        try:
+            async with http_client.stream("GET", dg_url, headers=dg_headers) as _dg:
+                # httpx doesn't support WebSocket natively; use websockets library
+                pass
+        except Exception:
+            pass
+
+    # Use the websockets library for the Deepgram connection
+    try:
+        import websockets as _ws_lib  # type: ignore[import]
+    except ImportError:
+        await websocket.close(code=4503, reason="websockets package not installed")
+        return
+
+    try:
+        async with _ws_lib.connect(dg_url, extra_headers=dg_headers) as dg_ws:
+
+            async def forward_to_deepgram():
+                """Receive browser audio chunks and forward to Deepgram."""
+                try:
+                    while True:
+                        data = await websocket.receive_bytes()
+                        await dg_ws.send(data)
+                except (WebSocketDisconnect, Exception):
+                    await dg_ws.close()
+
+            async def relay_transcripts():
+                """Receive Deepgram transcript frames and relay to browser."""
+                try:
+                    async for raw in dg_ws:
+                        try:
+                            frame = json.loads(raw)
+                        except json.JSONDecodeError:
+                            continue
+
+                        channel = frame.get("channel", {})
+                        alternatives = channel.get("alternatives", [{}])
+                        transcript = (alternatives[0] if alternatives else {}).get("transcript", "")
+                        is_final = frame.get("is_final", False)
+                        speech_final = frame.get("speech_final", False)
+                        confidence = (alternatives[0] if alternatives else {}).get("confidence", 0.0)
+                        start_ms = int(frame.get("start", 0) * 1000)
+                        duration_ms = int(frame.get("duration", 0) * 1000)
+
+                        if not transcript:
+                            continue
+
+                        # Relay to browser as a structured frame matching DeepgramTranscriptFrameRequest
+                        browser_frame = {
+                            "transcript": transcript,
+                            "is_final": is_final,
+                            "speech_final": speech_final,
+                            "confidence": confidence,
+                            "start_ms": start_ms,
+                            "duration_ms": duration_ms,
+                        }
+                        try:
+                            await websocket.send_json(browser_frame)
+                        except Exception:
+                            break
+
+                        # Also ingest into the backend transcript pipeline (fire-and-forget)
+                        if is_final or speech_final:
+                            asyncio.create_task(
+                                _ingest_deepgram_frame(session_id, child_id, browser_frame)
+                            )
+                except Exception:
+                    pass
+
+            await asyncio.gather(forward_to_deepgram(), relay_transcripts())
+
+    except Exception:
+        try:
+            await websocket.close(code=4500, reason="Deepgram connection failed")
+        except Exception:
+            pass
+
+
+async def _ingest_deepgram_frame(session_id: str, child_id: str, frame: dict) -> None:
+    """Silently ingest a Deepgram frame through the agentic pipeline for audit logging."""
+    from app.models import DeepgramTranscriptFrameRequest
+    try:
+        payload = DeepgramTranscriptFrameRequest(
+            session_id=session_id,
+            child_id=child_id,
+            transcript=frame["transcript"],
+            is_final=frame["is_final"],
+            speech_final=frame["speech_final"],
+            confidence=frame["confidence"],
+            start_ms=frame["start_ms"],
+            duration_ms=frame["duration_ms"],
+            attention_score=0.8,
+        )
+        orchestrator.ingest_deepgram_frame(payload)
+    except Exception:
+        pass
 
 
 @app.get("/architecture/providers", response_model=ArchitectureBlueprint)

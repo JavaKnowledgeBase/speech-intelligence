@@ -1,0 +1,231 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <!--
+    user-scalable=no: prevents accidental zoom during touch taps in child mode.
+    viewport-fit=cover: fills TV/tablet notches and rounded corners.
+  -->
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no, viewport-fit=cover" />
+  <meta name="apple-mobile-web-app-capable" content="yes" />
+  <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
+  <meta name="theme-color" content="#0d9488" />
+  <title>TalkBuddy — Speech Practice</title>
+  <link rel="stylesheet" href="/static/therapy.css" />
+</head>
+<body>
+
+<!-- ══════════════════════════════════════════════════════════════════════
+     CHILD MODE
+     Default view. Covers the full screen. Voice-first, minimal text.
+══════════════════════════════════════════════════════════════════════ -->
+<div id="child-mode" class="mode-screen">
+
+  <!-- ── Setup screen (no active session) ── -->
+  <div id="setup-screen" class="setup-screen">
+    <div class="setup-card">
+      <div class="mascot-hero" aria-hidden="true">🦊</div>
+      <h1 class="brand-title">TalkBuddy</h1>
+      <p class="brand-sub">Ready for speech practice?</p>
+
+      <label class="setup-field">
+        <span>Who's practicing today?</span>
+        <select id="child-select" class="child-select" aria-label="Select child">
+          <option value="">Loading children…</option>
+        </select>
+      </label>
+
+      <button id="begin-session-btn" class="big-btn begin-btn" disabled>
+        <span aria-hidden="true">▶</span> Start Practice
+      </button>
+
+      <button id="switch-to-caregiver-btn" class="link-btn">
+        Caregiver / Clinician View
+      </button>
+    </div>
+  </div>
+
+  <!-- ── Session screen (active practice loop) ── -->
+  <div id="session-screen" class="session-screen" hidden>
+
+    <!-- Header bar -->
+    <header class="session-header" role="banner">
+      <div class="header-left">
+        <span class="child-name-badge" id="session-child-name" aria-live="polite">—</span>
+      </div>
+
+      <div class="header-center" aria-label="Reward stars">
+        <div class="stars-display" id="stars-display" role="img" aria-label="0 of 5 stars earned">
+          <span class="star" aria-hidden="true">☆</span>
+          <span class="star" aria-hidden="true">☆</span>
+          <span class="star" aria-hidden="true">☆</span>
+          <span class="star" aria-hidden="true">☆</span>
+          <span class="star" aria-hidden="true">☆</span>
+        </div>
+      </div>
+
+      <div class="header-right">
+        <span class="provider-badge mock" id="stt-badge" title="Speech-to-text provider">STT</span>
+        <span class="provider-badge mock" id="tts-badge" title="Text-to-speech provider">TTS</span>
+        <button class="icon-btn" id="caregiver-mode-btn" title="Switch to caregiver view" aria-label="Caregiver view">
+          <span aria-hidden="true">👨‍⚕️</span>
+        </button>
+        <button class="icon-btn" id="end-session-btn" title="End session" aria-label="End session">
+          <span aria-hidden="true">✕</span>
+        </button>
+      </div>
+    </header>
+
+    <!-- Main practice arena -->
+    <main class="practice-arena" role="main">
+
+      <!-- Left: mascot + status -->
+      <div class="mascot-column">
+        <span class="mascot idle" id="mascot" role="img" aria-label="TalkBuddy mascot">🦊</span>
+
+        <div class="mascot-bubble" id="mascot-bubble" hidden aria-live="polite" aria-atomic="true">
+          <p id="mascot-bubble-text"></p>
+        </div>
+
+        <p class="mascot-status" id="mascot-status" aria-live="polite">Getting ready…</p>
+      </div>
+
+      <!-- Right: target word + mic -->
+      <div class="target-column">
+        <p class="prompt-label" id="prompt-label">Say this word:</p>
+
+        <div class="target-card" id="target-card" aria-label="Practice target">
+          <div class="target-icon" id="target-icon" aria-hidden="true">💬</div>
+          <div class="target-word" id="target-word" aria-live="polite">—</div>
+        </div>
+
+        <p class="target-cue" id="target-cue" aria-live="polite"></p>
+
+        <!-- Microphone indicator -->
+        <div class="mic-area" aria-label="Microphone status">
+          <div class="mic-ring idle" id="mic-ring" aria-hidden="true">
+            <span class="mic-icon">🎤</span>
+          </div>
+          <p class="mic-label" id="mic-label" aria-live="assertive">Waiting…</p>
+        </div>
+
+        <!-- Interim transcript (shown while child is speaking) -->
+        <div class="interim-display" id="interim-display" aria-live="polite" aria-atomic="false"></div>
+      </div>
+    </main>
+
+    <!-- ── Celebration overlay (on success) ── -->
+    <div class="overlay" id="celebration-overlay" hidden role="alertdialog" aria-label="Great job!">
+      <div class="overlay-content">
+        <div class="overlay-emoji" id="celebration-emoji" aria-hidden="true">🌟</div>
+        <p class="overlay-title" id="celebration-title">Great job!</p>
+        <p class="overlay-sub" id="celebration-sub"></p>
+      </div>
+    </div>
+
+    <!-- ── Help overlay (on escalation) ── -->
+    <div class="overlay" id="help-overlay" hidden role="alertdialog" aria-label="Help needed">
+      <div class="overlay-content">
+        <div class="overlay-emoji" aria-hidden="true">🤝</div>
+        <p class="overlay-title">A grown-up will help now.</p>
+        <p class="overlay-sub" id="help-message"></p>
+        <button class="overlay-btn" id="dismiss-help-btn">OK</button>
+      </div>
+    </div>
+
+    <!-- ── Completed overlay ── -->
+    <div class="overlay" id="completed-overlay" hidden role="alertdialog" aria-label="Session complete">
+      <div class="overlay-content">
+        <div class="overlay-emoji" aria-hidden="true">🏆</div>
+        <p class="overlay-title">Session done!</p>
+        <p class="overlay-sub" id="completed-sub"></p>
+        <button class="overlay-btn" id="start-over-btn">Practice Again</button>
+      </div>
+    </div>
+
+  </div><!-- /session-screen -->
+</div><!-- /child-mode -->
+
+
+<!-- ══════════════════════════════════════════════════════════════════════
+     CAREGIVER MODE
+     Dashboard: alerts, session status, progress, clinician notes.
+     Accessible via header button from session screen or setup screen.
+══════════════════════════════════════════════════════════════════════ -->
+<div id="caregiver-mode" class="mode-screen" hidden>
+
+  <header class="caregiver-header" role="banner">
+    <div class="caregiver-header-left">
+      <button class="icon-btn" id="back-to-child-btn" aria-label="Back to practice">
+        <span aria-hidden="true">◀</span>
+      </button>
+      <h1 class="caregiver-title">TalkBuddy</h1>
+      <span class="caregiver-sub">Caregiver View</span>
+    </div>
+
+    <div class="caregiver-header-right">
+      <label class="child-picker-label">
+        <span>Child:</span>
+        <select id="caregiver-child-select" aria-label="Select child for caregiver view">
+          <option value="">Select child…</option>
+        </select>
+      </label>
+      <button class="icon-btn" id="refresh-caregiver-btn" aria-label="Refresh dashboard">
+        <span aria-hidden="true">↻</span>
+      </button>
+    </div>
+  </header>
+
+  <main class="caregiver-grid" role="main">
+
+    <!-- Current session status -->
+    <section class="care-panel session-status-panel" aria-labelledby="session-panel-title">
+      <h2 class="panel-title" id="session-panel-title">
+        <span class="panel-icon" aria-hidden="true">📋</span>
+        Current Session
+      </h2>
+      <div id="session-status-panel-content">
+        <p class="care-empty">No active session.</p>
+      </div>
+    </section>
+
+    <!-- Alerts -->
+    <section class="care-panel alerts-panel" aria-labelledby="alerts-panel-title">
+      <h2 class="panel-title" id="alerts-panel-title">
+        <span class="panel-icon" aria-hidden="true">⚠️</span>
+        Alerts
+        <span class="badge-count zero" id="alert-count-badge" aria-live="polite">0</span>
+      </h2>
+      <div id="alerts-panel-content" aria-live="polite">
+        <p class="care-empty">No alerts. All good!</p>
+      </div>
+    </section>
+
+    <!-- Progress -->
+    <section class="care-panel progress-panel" aria-labelledby="progress-panel-title">
+      <h2 class="panel-title" id="progress-panel-title">
+        <span class="panel-icon" aria-hidden="true">📈</span>
+        Progress
+      </h2>
+      <div id="progress-panel-content">
+        <p class="care-empty">Select a child above to view progress.</p>
+      </div>
+    </section>
+
+    <!-- Clinician queue -->
+    <section class="care-panel clinician-panel" aria-labelledby="clinician-panel-title">
+      <h2 class="panel-title" id="clinician-panel-title">
+        <span class="panel-icon" aria-hidden="true">🩺</span>
+        Clinician Notes
+      </h2>
+      <div id="clinician-panel-content">
+        <p class="care-empty">No pending clinician reviews.</p>
+      </div>
+    </section>
+
+  </main>
+</div><!-- /caregiver-mode -->
+
+<script src="/static/therapy.js" defer></script>
+</body>
+</html>

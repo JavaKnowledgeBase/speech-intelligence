@@ -17,6 +17,8 @@ from app.models import (
     ProgressSnapshot,
     SessionEvent,
     SessionState,
+    VoiceRuntimeCheckpoint,
+    VoiceTranscriptRecord,
 )
 
 
@@ -351,6 +353,61 @@ def load_reviews(clinician_id: str | None = None) -> list[ClinicianReviewItem]:
         return reviews
     except Exception:
         return []
+
+
+def append_voice_transcript(session_id: str, record: VoiceTranscriptRecord) -> None:
+    """Persist a voice transcript record for session audit trail.
+
+    Requires the voice_transcripts table (see docs/supabase_schema.sql).
+    No-op when table is absent or Supabase is not configured.
+    """
+    client = _client()
+    if client is None:
+        return
+    try:
+        session_uuid = _session_uuid(client, session_id)
+        if session_uuid is None:
+            return
+        client.table("voice_transcripts").insert(
+            {
+                "session_id": session_uuid,
+                "transcript": record.transcript,
+                "is_final": record.is_final,
+                "elapsed_ms": record.elapsed_ms,
+                "attention_score": float(record.attention_score) if record.attention_score is not None else None,
+                "confidence": float(record.confidence) if record.confidence is not None else None,
+                "source": record.source,
+                "created_at": record.created_at.isoformat(),
+            }
+        ).execute()
+    except Exception:
+        pass
+
+
+def append_voice_checkpoint(session_id: str, checkpoint: VoiceRuntimeCheckpoint) -> None:
+    """Persist a voice latency checkpoint for observability.
+
+    Requires the voice_checkpoints table (see docs/supabase_schema.sql).
+    No-op when table is absent or Supabase is not configured.
+    """
+    client = _client()
+    if client is None:
+        return
+    try:
+        session_uuid = _session_uuid(client, session_id)
+        if session_uuid is None:
+            return
+        client.table("voice_checkpoints").insert(
+            {
+                "session_id": session_uuid,
+                "checkpoint_kind": checkpoint.checkpoint_kind,
+                "elapsed_ms": checkpoint.elapsed_ms,
+                "detail": checkpoint.detail,
+                "created_at": checkpoint.created_at.isoformat(),
+            }
+        ).execute()
+    except Exception:
+        pass
 
 
 def _child_uuid(client, external_child_id: str) -> str | None:

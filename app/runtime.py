@@ -8,6 +8,7 @@ from datetime import UTC, datetime, timedelta
 
 from app.config import settings
 from app.data import store
+from app.db import persistence
 from app.models import (
     VoiceRuntimeCheckpoint,
     VoiceRuntimeCheckpointRequest,
@@ -299,6 +300,7 @@ class VoiceRuntimeManager:
             detail=payload.detail,
         )
         store.voice_runtime_checkpoints.setdefault(payload.session_id, []).append(checkpoint)
+        persistence.append_voice_checkpoint(payload.session_id, checkpoint)
         return checkpoint
 
     def snapshot(self, session_id: str) -> VoiceRuntimeSnapshot:

@@ -255,6 +255,7 @@ class TherapyOrchestrator:
             created_at=utc_now(),
         )
         store.voice_runtime_transcripts.setdefault(payload.session_id, []).append(record)
+        persistence.append_voice_transcript(payload.session_id, record)
         event_kind = "runtime_transcript_final" if payload.is_final else "runtime_transcript_partial"
         preview = payload.transcript if len(payload.transcript) <= 80 else f"{payload.transcript[:77]}..."
         self._record_event(session, event_kind, f"{payload.source}: {preview}")
