@@ -1,11 +1,13 @@
 from __future__ import annotations
 
-from datetime import datetime
 from uuid import uuid4
 
+from app.clock import utc_now
 from app.data import store
 from app.db import persistence
 from app.integrations import integration_gateway
+from app.integrations.deepgram_adapter import deepgram_transcript_adapter
+from app.integrations.tts_adapter import tts_playback_adapter
 from app.models import (
     Alert,
     AlertAcknowledgeResponse,
@@ -38,7 +40,21 @@ from app.models import (
     SessionState,
     SpeechEvaluation,
     TargetCurriculumItem,
+    TtsSynthesisArtifact,
+    TtsSynthesisJob,
+    TtsSynthesisProcessRequest,
+    TtsSynthesisQueueSnapshot,
+    TtsSynthesisRequest,
     VectorMatchResult,
+    VoicePlaybackEnqueueRequest,
+    VoicePlaybackItem,
+    VoicePlaybackQueueSnapshot,
+    VoicePlaybackStateUpdateRequest,
+    VoiceRuntimeEvent,
+    VoiceRuntimeEventRequest,
+    VoiceTranscriptIngestionResponse,
+    VoiceTranscriptRecord,
+    VoiceTranscriptRequest,
     WorkflowQueueSnapshot,
 )
 from app.providers import EngagementExpert, PlannerExpert, ProviderCatalog, ReasoningExpert, SpeechExpert, WorkflowExpert
@@ -61,7 +77,7 @@ class TherapyOrchestrator:
         persistence.upsert_session(session)
 
     def _record_event(self, session: SessionState, kind: str, detail: str) -> SessionEvent:
-        event = SessionEvent(timestamp=datetime.utcnow(), kind=kind, detail=detail)
+        event = SessionEvent(timestamp=utc_now(), kind=kind, detail=detail)
         session.events.append(event)
         persistence.append_session_event(session.session_id, event)
         return event
@@ -109,7 +125,7 @@ class TherapyOrchestrator:
         session = SessionState(
             session_id=f"session-{uuid4().hex[:10]}",
             child_id=child_id,
-            started_at=datetime.utcnow(),
+            started_at=utc_now(),
             current_goal_id=goal.goal_id,
             current_target=goal.target_text,
             events=[],
@@ -142,7 +158,7 @@ class TherapyOrchestrator:
         if success:
             snapshot.successes += 1
         snapshot.mastery_score = round(snapshot.successes / snapshot.attempts, 2)
-        snapshot.last_practiced_at = datetime.utcnow()
+        snapshot.last_practiced_at = utc_now()
         store.progress[key] = snapshot
         persistence.upsert_progress(child_id, snapshot)
         return snapshot
@@ -157,7 +173,7 @@ class TherapyOrchestrator:
             caregiver_id=child.caregiver_id,
             reason=reason,
             message=filtered_message.text,
-            created_at=datetime.utcnow(),
+            created_at=utc_now(),
         )
         store.alerts[alert.alert_id] = alert
         persistence.upsert_alert(alert)
@@ -225,6 +241,113 @@ class TherapyOrchestrator:
         filtered_child_feedback, child_filter_trace = self._filter_output("child", "We can pause here. A grown-up will help with the next try", owner_id=session.child_id)
         expert_trace = [speech_trace, engagement_trace, reasoning_trace, workflow_trace, filter_trace[0], child_filter_trace[0]]
         return SpeechEvaluation(recognized_text=transcript, expected_text=attempted_target, pronunciation_score=round(pronunciation_score, 2), confidence_score=round(confidence_score, 2), engagement_score=engagement_score, action="escalate", feedback=filtered_child_feedback.text, parent_message=alert.message, caregiver_alert_id=alert.alert_id, expert_trace=expert_trace)
+
+    def ingest_runtime_transcript(self, payload: VoiceTranscriptRequest) -> VoiceTranscriptIngestionResponse:
+        session = store.sessions[payload.session_id]
+        record = VoiceTranscriptRecord(
+            session_id=payload.session_id,
+            transcript=payload.transcript,
+            is_final=payload.is_final,
+            elapsed_ms=payload.elapsed_ms,
+            attention_score=payload.attention_score,
+            source=payload.source,
+            confidence=payload.confidence,
+            created_at=utc_now(),
+        )
+        store.voice_runtime_transcripts.setdefault(payload.session_id, []).append(record)
+        event_kind = "runtime_transcript_final" if payload.is_final else "runtime_transcript_partial"
+        preview = payload.transcript if len(payload.transcript) <= 80 else f"{payload.transcript[:77]}..."
+        self._record_event(session, event_kind, f"{payload.source}: {preview}")
+        evaluation = self.process_turn(payload.session_id, payload.transcript, payload.attention_score) if payload.is_final else None
+        return VoiceTranscriptIngestionResponse(
+            session_id=payload.session_id,
+            transcript_record=record,
+            evaluation=evaluation,
+        )
+
+    def record_runtime_event(self, payload: VoiceRuntimeEventRequest) -> VoiceRuntimeEvent:
+        session = store.sessions[payload.session_id]
+        event = VoiceRuntimeEvent(
+            session_id=payload.session_id,
+            event_kind=payload.event_kind,
+            elapsed_ms=payload.elapsed_ms,
+            created_at=utc_now(),
+            detail=payload.detail,
+        )
+        store.voice_runtime_events.setdefault(payload.session_id, []).append(event)
+        detail = payload.detail or "no detail"
+        self._record_event(session, "runtime_event", f"{payload.event_kind}: {detail}")
+        return event
+
+    def ingest_deepgram_frame(self, payload):
+        transcript_request = deepgram_transcript_adapter.to_voice_transcript(payload)
+        return self.ingest_runtime_transcript(transcript_request)
+
+    def enqueue_playback(self, payload: VoicePlaybackEnqueueRequest) -> VoicePlaybackItem:
+        now = utc_now()
+        item = VoicePlaybackItem(
+            playback_id=f"playback-{uuid4().hex[:10]}",
+            session_id=payload.session_id,
+            child_id=payload.child_id,
+            text=payload.text,
+            voice_name=payload.voice_name,
+            audience=payload.audience,
+            source=payload.source,
+            status="pending",
+            created_at=now,
+            updated_at=now,
+        )
+        store.voice_playback_items.setdefault(payload.session_id, []).append(item)
+        self._record_event(store.sessions[payload.session_id], "playback_enqueued", f"{payload.voice_name}: {payload.text[:80]}")
+        return item
+
+    def update_playback_state(self, payload: VoicePlaybackStateUpdateRequest) -> VoicePlaybackItem:
+        items = store.voice_playback_items.get(payload.session_id, [])
+        for item in items:
+            if item.playback_id == payload.playback_id:
+                item.status = payload.status
+                item.updated_at = utc_now()
+                item.detail = payload.detail
+                self._record_event(store.sessions[payload.session_id], "playback_state", f"{item.playback_id} -> {payload.status}")
+                return item
+        raise KeyError(payload.playback_id)
+
+    def playback_queue(self, session_id: str) -> VoicePlaybackQueueSnapshot:
+        items = list(store.voice_playback_items.get(session_id, []))
+        active_item = next((item for item in reversed(items) if item.status in {"pending", "synthesizing", "ready", "playing"}), None)
+        return VoicePlaybackQueueSnapshot(session_id=session_id, items=items, active_item=active_item)
+
+    def create_tts_job(self, payload: TtsSynthesisRequest) -> TtsSynthesisJob:
+        items = store.voice_playback_items.get(payload.session_id, [])
+        playback_item = next((item for item in items if item.playback_id == payload.playback_id), None)
+        if playback_item is None:
+            raise KeyError(payload.playback_id)
+        playback_item.status = "synthesizing"
+        playback_item.updated_at = utc_now()
+        job = tts_playback_adapter.to_synthesis_job(payload, playback_item)
+        store.voice_synthesis_jobs.setdefault(payload.session_id, []).append(job)
+        self._record_event(store.sessions[payload.session_id], "tts_job_created", f"{payload.playback_id} -> {job.provider}")
+        return job
+
+    def process_tts_job(self, payload: TtsSynthesisProcessRequest) -> TtsSynthesisJob:
+        jobs = store.voice_synthesis_jobs.get(payload.session_id, [])
+        job = next((item for item in jobs if item.playback_id == payload.playback_id), None)
+        if job is None:
+            raise KeyError(payload.playback_id)
+        finalized = tts_playback_adapter.finalize_job(job)
+        playback_items = store.voice_playback_items.get(payload.session_id, [])
+        playback_item = next((item for item in playback_items if item.playback_id == payload.playback_id), None)
+        if playback_item is not None:
+            playback_item.status = "ready"
+            playback_item.updated_at = utc_now()
+            playback_item.detail = finalized.artifact.artifact_uri if finalized.artifact else None
+        self._record_event(store.sessions[payload.session_id], "tts_job_ready", f"{payload.playback_id} ready")
+        return finalized
+
+    def tts_queue(self, session_id: str) -> TtsSynthesisQueueSnapshot:
+        jobs = list(store.voice_synthesis_jobs.get(session_id, []))
+        latest_ready_job = next((job for job in reversed(jobs) if job.status == "ready"), None)
+        return TtsSynthesisQueueSnapshot(session_id=session_id, jobs=jobs, latest_ready_job=latest_ready_job)
 
     def filter_preview(self, audience: str, text: str, owner_id: str | None = None) -> FilterPreviewResponse:
         message, trace = self._filter_output(audience, text, owner_id=owner_id)

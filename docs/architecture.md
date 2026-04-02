@@ -53,6 +53,39 @@ That means the frontend should be optimized for:
 
 The system should not assume a desktop mouse-and-keyboard setup for therapy sessions only, but desktop must still be fully supported as a product surface.
 
+## Voice-first product rule
+The product should be treated as a voice-first application.
+Inference:
+- more than 98 percent of child-session interaction should be speech input and speech output
+- text should exist mainly for clinician, caregiver, admin, audit, and fallback use
+- frontend work should optimize for dependable microphone capture, low-latency playback, barge-in, and recovery before rich visual complexity
+## Recommended voice architecture
+For dependable production behavior, prefer a layered voice pipeline over a single speech-to-speech model.
+Default path:
+1. LiveKit WebRTC transports microphone audio and speaker playback.
+2. Deepgram Flux handles streaming speech-to-text and turn detection.
+3. OpenAI Responses API handles orchestration, reasoning, reporting, and tool use.
+4. A dedicated TTS provider speaks the approved response back to the user.
+5. OpenAI Realtime API is used selectively as a conversational fallback mode, not as the only runtime path.
+Why this is the default:
+- it preserves exact control over child-facing wording
+- it improves debuggability through text transcripts
+- it keeps guardrails, audit, and workflow hooks in the middle of the loop
+- it reduces lock-in to a single speech stack
+- it gives better fallback behavior when one provider degrades
+## Voice reliability requirements
+The frontend and runtime should support:
+- continuous microphone capture with clear recording state
+- interruption and barge-in while the system is speaking
+- streaming partial transcripts for internal state and caregiver debugging
+- graceful fallback when STT, TTS, or reasoning latency spikes
+- a short cached "please wait" voice response when the main path is slow
+- persistent transcript and event logging for review, analytics, and safety audits
+- separate voice styles for child-facing, caregiver-facing, and clinician-facing output
+- latency tracking for turn end, first transcript, first token, first audio byte, and playback start
+## TTS recommendation
+Use dedicated streaming TTS for the default therapy loop when output wording must be precise or policy-constrained.
+Use speech-to-speech generation only for special cases where natural back-and-forth matters more than exact wording.
 ## Recommended stack
 
 ### 1. Realtime runtime
@@ -116,12 +149,16 @@ Before production lock-in, benchmark Deepgram against AssemblyAI on real pediatr
 2. Deepgram transcribes and detects turns.
 3. Hume scores vocal engagement.
 4. OpenAI conductor checks room context, progress, and next action.
-5. Supabase stores session and environment data.
-6. Temporal triggers caregiver or clinician workflows.
-7. Clinician and caregiver desktop/tablet views read reports and overrides.
+5. Output is passed through the child-safe or caregiver-safe filter layer.
+6. Dedicated TTS renders the approved response for playback.
+7. Supabase stores session and environment data.
+8. Temporal triggers caregiver or clinician workflows.
+9. Clinician and caregiver desktop/tablet views read reports and overrides.
 
 ### Human-in-the-loop boundaries
 - AI may coach and score structured drills.
 - AI should escalate when confidence drops.
 - AI should ask for room adjustments when the environment is off-standard.
 - AI should not diagnose or override clinician-set constraints.
+
+

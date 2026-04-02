@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import pytest
 
+from app.clock import utc_now
 from app.agentic import TherapyOrchestrator
 from app.data import store
 from app.models import (
@@ -57,11 +58,10 @@ class TestChildAnalytics:
     def test_mastered_count_after_high_mastery(self, orch):
         # Manually push mastery above 0.8
         from app.models import ProgressSnapshot
-        from datetime import datetime
         store.progress[("child-1", "ba")] = ProgressSnapshot(
             child_id="child-1", target_text="ba",
             attempts=10, successes=9, mastery_score=0.9,
-            last_practiced_at=datetime.utcnow(),
+            last_practiced_at=utc_now(),
         )
         result = orch.child_analytics("child-1")
         assert result.targets_mastered >= 1
@@ -85,42 +85,39 @@ class TestChildAnalytics:
 
     def test_trend_needs_support_for_low_mastery(self, orch):
         from app.models import ProgressSnapshot
-        from datetime import datetime
         store.progress[("child-1", "ba")] = ProgressSnapshot(
             child_id="child-1", target_text="ba",
             attempts=10, successes=2, mastery_score=0.2,
-            last_practiced_at=datetime.utcnow(),
+            last_practiced_at=utc_now(),
         )
         store.progress[("child-1", "ma")] = ProgressSnapshot(
             child_id="child-1", target_text="ma",
             attempts=5, successes=1, mastery_score=0.2,
-            last_practiced_at=datetime.utcnow(),
+            last_practiced_at=utc_now(),
         )
         result = orch.child_analytics("child-1")
         assert result.recent_trend == "needs_support"
 
     def test_trend_improving_for_high_mastery(self, orch):
         from app.models import ProgressSnapshot
-        from datetime import datetime
         # Both targets must be high so overall >= 0.7
         store.progress[("child-1", "ba")] = ProgressSnapshot(
             child_id="child-1", target_text="ba",
             attempts=10, successes=9, mastery_score=0.9,
-            last_practiced_at=datetime.utcnow(),
+            last_practiced_at=utc_now(),
         )
         store.progress[("child-1", "ma")] = ProgressSnapshot(
             child_id="child-1", target_text="ma",
             attempts=10, successes=8, mastery_score=0.8,
-            last_practiced_at=datetime.utcnow(),
+            last_practiced_at=utc_now(),
         )
         result = orch.child_analytics("child-1")
         assert result.recent_trend == "improving"
 
     def test_attempt_based_trend_improving(self, orch):
         from app.models import ChildAttemptVector
-        from datetime import datetime
-        # 3 older failures + 3 recent successes → improving
-        base = datetime.utcnow()
+                # 3 older failures + 3 recent successes → improving
+        base = utc_now()
         vectors = [
             ChildAttemptVector(attempt_id=f"a{i}", child_id="child-1", target_id="target-b",
                                session_id="s1", success_flag=(i >= 3), created_at=base)
@@ -163,12 +160,11 @@ class TestEnterpriseAnalytics:
 
     def test_children_needing_support_low_mastery(self, orch):
         from app.models import ProgressSnapshot
-        from datetime import datetime
         # Drive child-1 mastery below 0.4
         store.progress[("child-1", "ba")] = ProgressSnapshot(
             child_id="child-1", target_text="ba",
             attempts=10, successes=2, mastery_score=0.2,
-            last_practiced_at=datetime.utcnow(),
+            last_practiced_at=utc_now(),
         )
         result = orch.enterprise_analytics()
         assert result.children_needing_support >= 1

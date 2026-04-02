@@ -5,6 +5,8 @@ from typing import Literal
 
 from pydantic import BaseModel, Field
 
+from app.clock import utc_now
+
 
 Role = Literal["child", "caregiver", "clinician", "admin"]
 EscalationReason = Literal["low_confidence", "low_engagement", "repeated_failure", "manual"]
@@ -108,7 +110,7 @@ class ChildAttemptVector(BaseModel):
     top_match_reference_id: str | None = None
     cosine_similarity: float = 0.0
     success_flag: bool = False
-    created_at: datetime = Field(default_factory=datetime.utcnow)
+    created_at: datetime = Field(default_factory=utc_now)
 
 
 class VectorMatchResult(BaseModel):
@@ -235,6 +237,260 @@ class ArchitectureBlueprint(BaseModel):
     approach: str
     components: list[ProviderComponent]
     implementation_notes: list[str]
+
+
+class VoiceRuntimeCheckpointRequest(BaseModel):
+    session_id: str
+    checkpoint_kind: Literal[
+        "turn_started",
+        "turn_ended",
+        "first_transcript",
+        "first_token",
+        "first_audio_byte",
+        "playback_started",
+    ]
+    elapsed_ms: int = Field(ge=0)
+    detail: str | None = None
+
+
+class VoiceRuntimeCheckpoint(BaseModel):
+    session_id: str
+    checkpoint_kind: str
+    elapsed_ms: int
+    created_at: datetime
+    detail: str | None = None
+
+
+class VoiceRuntimeSnapshot(BaseModel):
+    session_id: str
+    checkpoints: list[VoiceRuntimeCheckpoint]
+    latest_by_kind: dict[str, VoiceRuntimeCheckpoint]
+
+
+class VoiceTranscriptRequest(BaseModel):
+    session_id: str
+    transcript: str
+    is_final: bool = False
+    elapsed_ms: int = Field(ge=0, default=0)
+    attention_score: float = Field(ge=0.0, le=1.0, default=0.8)
+    source: Literal["stt_stream", "fallback_form"] = "stt_stream"
+    confidence: float | None = Field(default=None, ge=0.0, le=1.0)
+
+
+class VoiceTranscriptRecord(BaseModel):
+    session_id: str
+    transcript: str
+    is_final: bool
+    elapsed_ms: int
+    attention_score: float
+    source: str
+    confidence: float | None = None
+    created_at: datetime
+
+
+class VoiceTranscriptIngestionResponse(BaseModel):
+    session_id: str
+    accepted: bool = True
+    transcript_record: VoiceTranscriptRecord
+    evaluation: SpeechEvaluation | None = None
+
+
+class DeepgramTranscriptFrameRequest(BaseModel):
+    session_id: str
+    child_id: str
+    channel_index: int = 0
+    transcript: str
+    is_final: bool = False
+    speech_final: bool = False
+    confidence: float | None = Field(default=None, ge=0.0, le=1.0)
+    start_ms: int = Field(ge=0, default=0)
+    duration_ms: int = Field(ge=0, default=0)
+    attention_score: float = Field(ge=0.0, le=1.0, default=0.8)
+    provider: Literal["deepgram"] = "deepgram"
+    model: str = "flux-general-en"
+
+
+class VoiceRuntimeEventRequest(BaseModel):
+    session_id: str
+    event_kind: Literal[
+        "barge_in",
+        "playback_interrupted",
+        "client_joined",
+        "client_left",
+        "vad_started",
+        "vad_stopped",
+    ]
+    elapsed_ms: int = Field(ge=0, default=0)
+    detail: str | None = None
+
+
+class VoiceRuntimeEvent(BaseModel):
+    session_id: str
+    event_kind: str
+    elapsed_ms: int
+    created_at: datetime
+    detail: str | None = None
+
+
+class VoicePlaybackEnqueueRequest(BaseModel):
+    session_id: str
+    child_id: str
+    text: str
+    voice_name: str = "calm-coach"
+    audience: OutputAudience = "child"
+    source: Literal["session_feedback", "manual_preview", "runtime_replay"] = "session_feedback"
+
+
+class VoicePlaybackStateUpdateRequest(BaseModel):
+    session_id: str
+    playback_id: str
+    status: Literal["pending", "synthesizing", "ready", "playing", "interrupted", "played"]
+    detail: str | None = None
+    elapsed_ms: int = Field(ge=0, default=0)
+
+
+class VoicePlaybackItem(BaseModel):
+    playback_id: str
+    session_id: str
+    child_id: str
+    text: str
+    voice_name: str
+    audience: OutputAudience
+    source: str
+    status: Literal["pending", "synthesizing", "ready", "playing", "interrupted", "played"]
+    created_at: datetime
+    updated_at: datetime
+    detail: str | None = None
+
+
+class VoicePlaybackQueueSnapshot(BaseModel):
+    session_id: str
+    items: list[VoicePlaybackItem]
+    active_item: VoicePlaybackItem | None = None
+
+
+class TtsSynthesisRequest(BaseModel):
+    session_id: str
+    playback_id: str
+    voice_name: str = "calm-coach"
+    provider: Literal["dedicated_streaming_tts"] = "dedicated_streaming_tts"
+    output_format: Literal["pcm_s16le", "mp3"] = "pcm_s16le"
+    sample_rate_hz: int = 24000
+
+
+class TtsSynthesisArtifact(BaseModel):
+    artifact_uri: str
+    mime_type: str
+    duration_ms: int
+    size_bytes: int
+
+
+class TtsSynthesisProcessRequest(BaseModel):
+    session_id: str
+    playback_id: str
+
+
+class TtsSynthesisJob(BaseModel):
+    session_id: str
+    playback_id: str
+    provider: str
+    voice_name: str
+    text: str
+    output_format: str
+    sample_rate_hz: int
+    delivery_mode: Literal["local_mock", "streaming_tts"]
+    status: Literal["queued", "synthesizing", "ready"]
+    synthesis_key: str
+    artifact: TtsSynthesisArtifact | None = None
+    notes: list[str] = Field(default_factory=list)
+
+
+class TtsSynthesisQueueSnapshot(BaseModel):
+    session_id: str
+    jobs: list[TtsSynthesisJob]
+    latest_ready_job: TtsSynthesisJob | None = None
+
+
+class VoiceRuntimeRequest(BaseModel):
+    session_id: str
+    child_id: str
+    audio_enabled: bool = True
+
+
+class VoiceRuntimeLane(BaseModel):
+    lane_id: str
+    lane_role: Literal["stt", "tts", "transcript", "events"]
+    provider: str
+    delivery_mode: Literal["local_only", "https_poll", "https_stream", "webrtc_data"]
+    codec: str | None = None
+    path: str | None = None
+    notes: list[str] = Field(default_factory=list)
+
+
+class VoiceRuntimeDataChannel(BaseModel):
+    label: str
+    direction: Literal["publish", "subscribe", "bidirectional"]
+    purpose: str
+
+
+class VoiceRuntimeClientConfig(BaseModel):
+    transport_kind: Literal["local_mock", "livekit_webrtc"]
+    turn_protocol: Literal["manual_turn", "server_vad_stream"]
+    transcript_mode: Literal["fallback_form", "streaming_partial"]
+    playback_mode: Literal["manual_ready", "streaming_tts"]
+    event_endpoint: str
+    health_endpoint: str
+    join_endpoint: str
+    reconnect_strategy: Literal["manual", "token_refresh"]
+    data_channels: list[VoiceRuntimeDataChannel] = Field(default_factory=list)
+    input_sample_rate_hz: int = 16000
+    output_sample_rate_hz: int = 24000
+    frame_duration_ms: int = 20
+    stt_lane: VoiceRuntimeLane
+    tts_lane: VoiceRuntimeLane
+    transcript_lane: VoiceRuntimeLane
+    event_lane: VoiceRuntimeLane
+
+
+class VoiceRuntimeTransportConnectRequest(BaseModel):
+    session_id: str
+    child_id: str
+    requested_transport: Literal["local_mock", "livekit_webrtc"] | None = None
+
+
+class VoiceRuntimeTransportConnection(BaseModel):
+    session_id: str
+    child_id: str
+    connection_state: Literal["mock_connected", "ready_to_join", "blocked"]
+    transport_kind: Literal["local_mock", "livekit_webrtc"]
+    join_url: str
+    room_name: str
+    participant_identity: str
+    access_token: str | None = None
+    token_status: Literal["mock", "ready", "missing_config"]
+    data_channels: list[VoiceRuntimeDataChannel] = Field(default_factory=list)
+    notes: list[str] = Field(default_factory=list)
+
+
+class VoiceRuntimeSession(BaseModel):
+    session_id: str
+    child_id: str
+    runtime_mode: Literal["mock", "live"]
+    transport_provider: str
+    room_name: str
+    participant_identity: str
+    participant_name: str
+    transport_url: str
+    access_token: str | None = None
+    token_status: Literal["mock", "ready", "missing_config"]
+    expires_at: datetime | None = None
+    speech_to_text_provider: str
+    tts_provider: str
+    conductor_provider: str
+    transcript_fallback_enabled: bool = True
+    barge_in_enabled: bool = True
+    client_config: VoiceRuntimeClientConfig
+    notes: list[str] = Field(default_factory=list)
 
 
 class SessionStartRequest(BaseModel):

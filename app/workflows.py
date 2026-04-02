@@ -1,8 +1,8 @@
 from __future__ import annotations
 
-from datetime import datetime
 from uuid import uuid4
 
+from app.clock import utc_now
 from app.data import store
 from app.db import persistence
 from app.models import Alert, AlertAcknowledgeResponse, ClinicianReviewItem, WorkflowQueueSnapshot
@@ -21,7 +21,7 @@ class WorkflowManager:
             session_id=session_id,
             priority=priority,
             summary=summary,
-            created_at=datetime.utcnow(),
+            created_at=utc_now(),
         )
         self.clinician_reviews[review.review_id] = review
         persistence.upsert_review(review)

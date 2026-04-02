@@ -101,6 +101,8 @@ python -m pip install -r requirements.txt
 uvicorn app.main:app --reload
 ```
 
+Open the voice-first shell at `http://localhost:8000/`.
+
 ## Repository mode
 
 The repository layer supports three runtime modes through `SUPABASE_REPOSITORY_MODE`:
@@ -119,6 +121,19 @@ Required Supabase variables:
 - `GET /architecture/providers`
 - `GET /architecture/graph`
 - `GET /providers/status`
+- `POST /runtime/voice/session`
+- `POST /runtime/voice/connect`
+- `POST /runtime/voice/checkpoints`
+- `GET /runtime/voice/checkpoints?session_id=...`
+- `POST /runtime/voice/transcript`
+- `POST /runtime/voice/deepgram`
+- `POST /runtime/voice/events`
+- `POST /runtime/voice/playback`
+- `POST /runtime/voice/playback/state`
+- `GET /runtime/voice/playback?session_id=...`
+- `POST /runtime/voice/tts`
+- `POST /runtime/voice/tts/process`
+- `GET /runtime/voice/tts?session_id=...`
 - `POST /filter/preview`
 - `GET /profiles/child/child-1`
 - `GET /profiles/parent/caregiver-1`
@@ -136,6 +151,21 @@ Required Supabase variables:
 - `GET /enterprise/usage`
 
 ## Session start shape
+
+The frontend shell now includes a first-pass voice runtime contract.
+
+Use `POST /runtime/voice/session` after `POST /session/start` to request the current transport handshake details, room name, token state, and explicit STT/TTS/transcript/event lane metadata for the child session. In mock mode it returns the same shape without a signed token so the frontend or future native app shell can keep moving before LiveKit is fully connected.
+
+Use `POST /runtime/voice/connect` when the client is ready to move from session metadata into a transport join handshake. In live mode it returns a `ready_to_join` contract with the LiveKit URL, room, token, and data-channel labels. In mock mode it still returns a stable local connection shape.
+
+Use `POST /runtime/voice/transcript` for partial or final transcript chunks. Final chunks run the normal therapy turn evaluation, which makes this the core internal seam for STT providers.
+
+Use `POST /runtime/voice/deepgram` when a transport worker is receiving Deepgram-style streaming frames and needs the backend to normalize them into the internal transcript contract before session evaluation.
+
+Use `POST /runtime/voice/events` for barge-in, VAD, client join, and playback interruption signals, and keep `/runtime/voice/checkpoints` for latency timing snapshots.
+
+Use the playback queue endpoints to move child-facing audio through a deterministic lane before real synthesis is attached: enqueue with `POST /runtime/voice/playback`, promote a queued playback item into a provider-ready synthesis job with `POST /runtime/voice/tts`, finalize that job into a ready artifact with `POST /runtime/voice/tts/process`, inspect synthesis jobs directly with `GET /runtime/voice/tts`, and move items through `pending -> synthesizing -> ready -> playing -> interrupted -> played` with `POST /runtime/voice/playback/state`, and inspect the queue with `GET /runtime/voice/playback`.
+
 
 `POST /session/start` can include an optional environment snapshot. If the room looks off-standard, the response includes a calm parent-facing adjustment message before therapy begins.
 

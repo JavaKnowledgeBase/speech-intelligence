@@ -53,6 +53,26 @@ It should be designed for:
 
 For TV use, the interface should still be usable when the child is a few feet away from the screen.
 
+## Voice-first runtime requirement
+This product should operate as a voice-first system.
+Target assumption:
+- more than 98% of child-session interaction should happen through voice input and voice output
+That means frontend and runtime work should prioritize:
+- dependable microphone capture
+- low-latency speech playback
+- barge-in while the system is speaking
+- transcript capture for audit and clinician review
+- fallback behavior when speech services are degraded
+The preferred production voice stack is:
+1. LiveKit for WebRTC transport
+2. Deepgram Flux for streaming speech-to-text and turn detection
+3. OpenAI Responses API for orchestration and tool use
+4. dedicated streaming TTS for the default child-facing reply path
+5. OpenAI Realtime API only as a selective fallback or special conversational mode
+Important product rule:
+- do not rely on browser speech APIs as the primary production path
+- do not rely on a single speech-to-speech model as the only runtime path
+- keep a text transcript even when the spoken path is primary
 ## Per-word data strategy
 
 For each word, create a dictionary of:
@@ -186,3 +206,5 @@ That map can answer:
 - which next targets should be introduced
 - which speaking style and expression style work best for that child and caregiver
 - which environment setup leads to the best focus and comfort
+
+

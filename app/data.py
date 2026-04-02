@@ -1,7 +1,8 @@
 from __future__ import annotations
 
-from datetime import datetime, timedelta
+from datetime import timedelta
 
+from app.clock import utc_now
 from app.models import (
     CaregiverProfile,
     ChildAttemptVector,
@@ -31,6 +32,12 @@ class InMemoryStore:
         self.sessions: dict[str, object] = {}
         self.alerts: dict[str, object] = {}
         self.progress: dict[tuple[str, str], ProgressSnapshot] = {}
+        self.voice_runtime_checkpoints: dict[str, list[object]] = {}
+        self.voice_runtime_transcripts: dict[str, list[object]] = {}
+        self.voice_runtime_events: dict[str, list[object]] = {}
+        self.voice_runtime_connections: dict[str, object] = {}
+        self.voice_playback_items: dict[str, list[object]] = {}
+        self.voice_synthesis_jobs: dict[str, list[object]] = {}
         self._seed()
 
     def _seed_curriculum(self) -> None:
@@ -67,7 +74,7 @@ class InMemoryStore:
         self._seed_curriculum()
         self._seed_reference_vectors()
         self.attempt_vectors["child-1"] = [ChildAttemptVector(attempt_id="attempt-1", child_id="child-1", target_id="target-b", session_id="seed-session-1", audio_embedding=[0.88, 0.14, 0.31, 0.43], lip_embedding=[0.69, 0.79, 0.2, 0.25], emotion_embedding=[0.4, 0.49, 0.6, 0.69], noise_embedding=[0.58, 0.19, 0.28, 0.35], top_match_reference_id="target-b-audio-1", cosine_similarity=0.93, success_flag=True)]
-        now = datetime.utcnow()
+        now = utc_now()
         self.progress[("child-1", "ba")] = ProgressSnapshot(child_id="child-1", target_text="ba", attempts=8, successes=6, mastery_score=0.75, last_practiced_at=now - timedelta(days=1))
         self.progress[("child-1", "ma")] = ProgressSnapshot(child_id="child-1", target_text="ma", attempts=5, successes=2, mastery_score=0.4, last_practiced_at=now - timedelta(days=2))
         self.progress[("child-2", "ba")] = ProgressSnapshot(child_id="child-2", target_text="ba", attempts=7, successes=5, mastery_score=0.71, last_practiced_at=now - timedelta(hours=12))

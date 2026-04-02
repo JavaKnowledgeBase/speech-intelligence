@@ -1,8 +1,11 @@
 from __future__ import annotations
 
 from contextlib import asynccontextmanager
+from pathlib import Path
 
 from fastapi import FastAPI, HTTPException, Query
+from fastapi.responses import FileResponse
+from fastapi.staticfiles import StaticFiles
 
 from app.agentic import orchestrator
 from app.data import store
@@ -20,6 +23,7 @@ from app.models import (
     ChildReport,
     ClinicianReviewItem,
     CommunicationProfile,
+    DeepgramTranscriptFrameRequest,
     EnterpriseAnalytics,
     EnterpriseUsage,
     EnvironmentCheckRequest,
@@ -33,16 +37,38 @@ from app.models import (
     ProviderStatus,
     ReferenceVector,
     SessionCompletionResponse,
+    VoicePlaybackEnqueueRequest,
+    VoicePlaybackItem,
+    VoicePlaybackQueueSnapshot,
+    VoicePlaybackStateUpdateRequest,
     SessionDetail,
     SessionStartRequest,
     SessionStartResponse,
     SpeechEvaluation,
     SpeechInputRequest,
     TargetCurriculumItem,
+    TtsSynthesisJob,
+    TtsSynthesisProcessRequest,
+    TtsSynthesisQueueSnapshot,
+    TtsSynthesisRequest,
     VectorMatchResult,
+    VoiceRuntimeCheckpoint,
+    VoiceRuntimeCheckpointRequest,
+    VoiceRuntimeEvent,
+    VoiceRuntimeEventRequest,
+    VoiceRuntimeRequest,
+    VoiceRuntimeSession,
+    VoiceRuntimeSnapshot,
+    VoiceRuntimeTransportConnectRequest,
+    VoiceRuntimeTransportConnection,
+    VoiceTranscriptIngestionResponse,
+    VoiceTranscriptRequest,
     WorkflowQueueSnapshot,
 )
+from app.runtime import runtime_manager
 from app.workflows import workflow_manager
+
+STATIC_DIR = Path(__file__).with_name("static")
 
 
 @asynccontextmanager
@@ -78,6 +104,13 @@ app = FastAPI(
     lifespan=lifespan,
 )
 
+app.mount("/static", StaticFiles(directory=STATIC_DIR), name="static")
+
+
+@app.get("/", include_in_schema=False)
+def frontend_shell() -> FileResponse:
+    return FileResponse(STATIC_DIR / "index.html")
+
 
 @app.get("/health")
 def health() -> dict[str, str]:
@@ -97,6 +130,114 @@ def architecture_graph() -> AgentGraph:
 @app.get("/providers/status", response_model=list[ProviderStatus])
 def provider_status() -> list[ProviderStatus]:
     return orchestrator.provider_statuses()
+
+
+@app.post("/runtime/voice/session", response_model=VoiceRuntimeSession)
+def create_voice_runtime_session(payload: VoiceRuntimeRequest) -> VoiceRuntimeSession:
+    if payload.child_id not in store.children:
+        raise HTTPException(status_code=404, detail="Child not found")
+    if payload.session_id not in store.sessions:
+        raise HTTPException(status_code=404, detail="Session not found")
+    return runtime_manager.create_session(payload)
+
+
+@app.post("/runtime/voice/connect", response_model=VoiceRuntimeTransportConnection)
+def connect_voice_runtime_transport(payload: VoiceRuntimeTransportConnectRequest) -> VoiceRuntimeTransportConnection:
+    if payload.child_id not in store.children:
+        raise HTTPException(status_code=404, detail="Child not found")
+    if payload.session_id not in store.sessions:
+        raise HTTPException(status_code=404, detail="Session not found")
+    return runtime_manager.connect_transport(payload)
+
+
+@app.post("/runtime/voice/checkpoints", response_model=VoiceRuntimeCheckpoint)
+def record_voice_runtime_checkpoint(payload: VoiceRuntimeCheckpointRequest) -> VoiceRuntimeCheckpoint:
+    if payload.session_id not in store.sessions:
+        raise HTTPException(status_code=404, detail="Session not found")
+    return runtime_manager.record_checkpoint(payload)
+
+
+@app.get("/runtime/voice/checkpoints", response_model=VoiceRuntimeSnapshot)
+def voice_runtime_snapshot(session_id: str = Query(...)) -> VoiceRuntimeSnapshot:
+    if session_id not in store.sessions:
+        raise HTTPException(status_code=404, detail="Session not found")
+    return runtime_manager.snapshot(session_id)
+
+
+@app.post("/runtime/voice/transcript", response_model=VoiceTranscriptIngestionResponse)
+def ingest_voice_runtime_transcript(payload: VoiceTranscriptRequest) -> VoiceTranscriptIngestionResponse:
+    if payload.session_id not in store.sessions:
+        raise HTTPException(status_code=404, detail="Session not found")
+    return orchestrator.ingest_runtime_transcript(payload)
+
+
+@app.post("/runtime/voice/deepgram", response_model=VoiceTranscriptIngestionResponse)
+def ingest_deepgram_transcript_frame(payload: DeepgramTranscriptFrameRequest) -> VoiceTranscriptIngestionResponse:
+    if payload.child_id not in store.children:
+        raise HTTPException(status_code=404, detail="Child not found")
+    if payload.session_id not in store.sessions:
+        raise HTTPException(status_code=404, detail="Session not found")
+    return orchestrator.ingest_deepgram_frame(payload)
+
+
+@app.post("/runtime/voice/events", response_model=VoiceRuntimeEvent)
+def record_voice_runtime_event(payload: VoiceRuntimeEventRequest) -> VoiceRuntimeEvent:
+    if payload.session_id not in store.sessions:
+        raise HTTPException(status_code=404, detail="Session not found")
+    return orchestrator.record_runtime_event(payload)
+
+
+@app.post("/runtime/voice/playback", response_model=VoicePlaybackItem)
+def enqueue_voice_playback(payload: VoicePlaybackEnqueueRequest) -> VoicePlaybackItem:
+    if payload.child_id not in store.children:
+        raise HTTPException(status_code=404, detail="Child not found")
+    if payload.session_id not in store.sessions:
+        raise HTTPException(status_code=404, detail="Session not found")
+    return orchestrator.enqueue_playback(payload)
+
+
+@app.post("/runtime/voice/playback/state", response_model=VoicePlaybackItem)
+def update_voice_playback_state(payload: VoicePlaybackStateUpdateRequest) -> VoicePlaybackItem:
+    if payload.session_id not in store.sessions:
+        raise HTTPException(status_code=404, detail="Session not found")
+    try:
+        return orchestrator.update_playback_state(payload)
+    except KeyError:
+        raise HTTPException(status_code=404, detail="Playback item not found") from None
+
+
+@app.get("/runtime/voice/playback", response_model=VoicePlaybackQueueSnapshot)
+def get_voice_playback_queue(session_id: str = Query(...)) -> VoicePlaybackQueueSnapshot:
+    if session_id not in store.sessions:
+        raise HTTPException(status_code=404, detail="Session not found")
+    return orchestrator.playback_queue(session_id)
+
+
+@app.post("/runtime/voice/tts", response_model=TtsSynthesisJob)
+def create_voice_tts_job(payload: TtsSynthesisRequest) -> TtsSynthesisJob:
+    if payload.session_id not in store.sessions:
+        raise HTTPException(status_code=404, detail="Session not found")
+    try:
+        return orchestrator.create_tts_job(payload)
+    except KeyError:
+        raise HTTPException(status_code=404, detail="Playback item not found") from None
+
+
+@app.post("/runtime/voice/tts/process", response_model=TtsSynthesisJob)
+def process_voice_tts_job(payload: TtsSynthesisProcessRequest) -> TtsSynthesisJob:
+    if payload.session_id not in store.sessions:
+        raise HTTPException(status_code=404, detail="Session not found")
+    try:
+        return orchestrator.process_tts_job(payload)
+    except KeyError:
+        raise HTTPException(status_code=404, detail="TTS job not found") from None
+
+
+@app.get("/runtime/voice/tts", response_model=TtsSynthesisQueueSnapshot)
+def get_voice_tts_queue(session_id: str = Query(...)) -> TtsSynthesisQueueSnapshot:
+    if session_id not in store.sessions:
+        raise HTTPException(status_code=404, detail="Session not found")
+    return orchestrator.tts_queue(session_id)
 
 
 @app.post("/filter/preview", response_model=FilterPreviewResponse)

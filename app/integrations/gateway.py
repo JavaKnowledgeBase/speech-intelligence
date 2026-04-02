@@ -15,9 +15,9 @@ Two modes per capability:
 import hashlib
 import os
 import re
-from datetime import datetime
 from uuid import uuid4
 
+from app.clock import utc_now
 from app.data import store
 from app.models import (
     AttemptIngestionRequest,
@@ -239,7 +239,7 @@ class IntegrationGateway:
             top_match_reference_id=top_match.reference_id if top_match else None,
             cosine_similarity=top_match.cosine_similarity if top_match else 0.0,
             success_flag=payload.success_flag,
-            created_at=datetime.utcnow(),
+            created_at=utc_now(),
         )
         repository.save_attempt_vector(attempt)
         return attempt

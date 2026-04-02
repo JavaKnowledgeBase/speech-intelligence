@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from datetime import datetime
+from app.clock import utc_now
 
 from app.db import persistence
 from app.models import ChildAttemptVector
@@ -68,7 +68,7 @@ def test_upsert_attempt_vector_includes_target_uuid(monkeypatch):
         session_id="session-1",
         audio_embedding=[0.1, 0.2, 0.3, 0.4],
         success_flag=True,
-        created_at=datetime.utcnow(),
+        created_at=utc_now(),
     )
 
     persistence.upsert_attempt_vector(attempt)
@@ -91,7 +91,7 @@ def test_load_alerts_resolves_external_child_and_session_ids(monkeypatch):
                         "reason": "manual",
                         "message": "Please help.",
                         "acknowledged": False,
-                        "created_at": datetime.utcnow().isoformat(),
+                        "created_at": utc_now().isoformat(),
                     }
                 ]
             )
@@ -121,7 +121,7 @@ def test_load_reviews_resolves_external_child_and_session_ids(monkeypatch):
                         "priority": "high",
                         "status": "queued",
                         "summary": "Needs review.",
-                        "created_at": datetime.utcnow().isoformat(),
+                        "created_at": utc_now().isoformat(),
                     }
                 ]
             )
@@ -154,7 +154,7 @@ def test_load_attempt_vectors_resolves_external_target_id(monkeypatch):
                         "top_match_reference_external_id": "target-b-audio-1",
                         "cosine_similarity": 0.91,
                         "success_flag": True,
-                        "created_at": datetime.utcnow().isoformat(),
+                        "created_at": utc_now().isoformat(),
                     }
                 ]
             )

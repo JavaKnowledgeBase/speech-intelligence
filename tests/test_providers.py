@@ -5,7 +5,8 @@ PlannerExpert, WorkflowExpert, and OutputFilterExpert."""
 
 import pytest
 
-from app.models import CommunicationProfile, OutputPolicy
+from app.clock import utc_now
+from app.models import CommunicationProfile, DeepgramTranscriptFrameRequest, OutputPolicy, TtsSynthesisRequest, VoicePlaybackItem
 from app.providers import (
     EngagementExpert,
     OutputFilterExpert,
@@ -14,6 +15,8 @@ from app.providers import (
     SpeechExpert,
     WorkflowExpert,
 )
+from app.integrations.deepgram_adapter import DeepgramTranscriptAdapter
+from app.integrations.tts_adapter import TtsPlaybackAdapter
 
 
 # ── SpeechExpert ──────────────────────────────────────────────────────────────
@@ -189,3 +192,87 @@ class TestOutputFilterExpert:
         expert = OutputFilterExpert()
         msg, _ = expert.filter_text("parent", "Please help your child.")
         assert "clear" in msg.style_tags or "supportive" in msg.style_tags
+
+
+
+class TestDeepgramTranscriptAdapter:
+    def test_partial_frame_maps_to_non_final_voice_request(self):
+        adapter = DeepgramTranscriptAdapter()
+        payload = DeepgramTranscriptFrameRequest(
+            session_id='session-1',
+            child_id='child-1',
+            transcript='  ba   ba ',
+            is_final=False,
+            speech_final=False,
+            confidence=0.81,
+            start_ms=120,
+            duration_ms=230,
+        )
+        result = adapter.to_voice_transcript(payload)
+        assert result.transcript == 'ba ba'
+        assert result.is_final is False
+        assert result.elapsed_ms == 350
+        assert result.source == 'stt_stream'
+
+    def test_speech_final_frame_maps_to_final_voice_request(self):
+        adapter = DeepgramTranscriptAdapter()
+        payload = DeepgramTranscriptFrameRequest(
+            session_id='session-1',
+            child_id='child-1',
+            transcript='ba',
+            speech_final=True,
+            confidence=0.93,
+            start_ms=0,
+            duration_ms=480,
+        )
+        result = adapter.to_voice_transcript(payload)
+        assert result.is_final is True
+        assert result.confidence == 0.93
+        assert result.elapsed_ms == 480
+
+
+
+class TestTtsPlaybackAdapter:
+    def test_playback_item_maps_to_synthesis_job(self):
+        adapter = TtsPlaybackAdapter()
+        playback_item = VoicePlaybackItem(
+            playback_id='playback-1',
+            session_id='session-1',
+            child_id='child-1',
+            text='Nice work. We can move to the next sound now.',
+            voice_name='calm-coach',
+            audience='child',
+            source='session_feedback',
+            status='pending',
+            created_at=utc_now(),
+            updated_at=utc_now(),
+        )
+        payload = TtsSynthesisRequest(session_id='session-1', playback_id='playback-1')
+        job = adapter.to_synthesis_job(payload, playback_item)
+        assert job.playback_id == 'playback-1'
+        assert job.voice_name == 'calm-coach'
+        assert job.delivery_mode == 'streaming_tts'
+        assert job.status == 'queued'
+
+
+    def test_finalize_job_adds_artifact_metadata(self):
+        adapter = TtsPlaybackAdapter()
+        playback_item = VoicePlaybackItem(
+            playback_id='playback-2',
+            session_id='session-1',
+            child_id='child-1',
+            text='Quiet try. Let us go again.',
+            voice_name='calm-coach',
+            audience='child',
+            source='session_feedback',
+            status='pending',
+            created_at=utc_now(),
+            updated_at=utc_now(),
+        )
+        payload = TtsSynthesisRequest(session_id='session-1', playback_id='playback-2')
+        job = adapter.to_synthesis_job(payload, playback_item)
+        finalized = adapter.finalize_job(job)
+        assert finalized.status == 'ready'
+        assert finalized.artifact is not None
+        assert finalized.artifact.artifact_uri.startswith('mock://tts/')
+        assert finalized.artifact.duration_ms > 0

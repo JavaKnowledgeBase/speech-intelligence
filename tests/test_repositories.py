@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import pytest
 
+from app.clock import utc_now
 from app.models import EnvironmentCheckRequest
 from app.repositories import TherapyRepository
 
@@ -84,8 +85,7 @@ class TestAttemptVectors:
     def test_save_attempt_vector_stores(self, repo):
         from app.data import store
         from app.models import ChildAttemptVector
-        from datetime import datetime
-
+        
         attempt = ChildAttemptVector(
             attempt_id="test-attempt-save",
             child_id="child-2",
@@ -93,7 +93,7 @@ class TestAttemptVectors:
             session_id="s-test",
             audio_embedding=[0.5, 0.5, 0.5, 0.5],
             success_flag=True,
-            created_at=datetime.utcnow(),
+            created_at=utc_now(),
         )
         repo.save_attempt_vector(attempt)
         saved = repo.get_attempt_vectors("child-2")

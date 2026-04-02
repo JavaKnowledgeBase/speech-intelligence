@@ -8,6 +8,7 @@ authoritative during a request, while Supabase provides durability across restar
 
 from datetime import datetime
 
+from app.clock import utc_now
 from app.db.client import db
 from app.models import (
     Alert,
@@ -288,7 +289,7 @@ def load_attempt_vectors_for_child(child_id: str) -> list[ChildAttemptVector]:
                     top_match_reference_id=row.get("top_match_reference_external_id"),
                     cosine_similarity=float(row.get("cosine_similarity") or 0.0),
                     success_flag=bool(row.get("success_flag")),
-                    created_at=datetime.fromisoformat(row["created_at"]) if row.get("created_at") else datetime.utcnow(),
+                    created_at=datetime.fromisoformat(row["created_at"]) if row.get("created_at") else utc_now(),
                 )
             )
         return attempts
