@@ -21,6 +21,10 @@ const S = {
   COMPLETED: "completed",
 };
 
+const COACHING_TO_LISTENING_GAP_MS = 90;
+const PROMPT_ECHO_GUARD_MS = 160;
+const NO_PROMPT_ECHO_GUARD_MS = 60;
+
 const state = {
   sessionState: S.IDLE,
   sessionId: sessionStorage.getItem("tb_session_id"),
@@ -511,18 +515,19 @@ async function coachAndListen(message) {
   if (message) {
     showBubble(message);
     setMascot("speak");
-    setMic("idle", "Getting ready...");
+    setMic("idle", "Almost ready...");
     await speak(message);
     hideBubble();
   }
   if (state.sessionState !== S.COACHING) return;
-  await new Promise((resolve) => setTimeout(resolve, 450));
+  setMic("idle", "Your turn...");
+  await new Promise((resolve) => setTimeout(resolve, COACHING_TO_LISTENING_GAP_MS));
   if (state.sessionState !== S.COACHING) return;
   transitionTo(S.LISTENING);
   setMascot("listen");
   setMic("listening", "Listening...");
   el.interimDisplay.textContent = "";
-  state.listenReadyAt = Date.now() + (message ? 450 : 150);
+  state.listenReadyAt = Date.now() + (message ? PROMPT_ECHO_GUARD_MS : NO_PROMPT_ECHO_GUARD_MS);
   startListening();
 }
 
