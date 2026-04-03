@@ -1,6 +1,5 @@
 from __future__ import annotations
 
-import asyncio
 import json
 from contextlib import asynccontextmanager
 from pathlib import Path
@@ -113,24 +112,43 @@ app = FastAPI(
 app.add_middleware(ObservabilityMiddleware)
 app.add_middleware(ClerkAuthMiddleware)
 
+_NO_CACHE = {"Cache-Control": "no-store, no-cache, must-revalidate", "Pragma": "no-cache"}
+
+
+@app.get("/static/{filename}.js", include_in_schema=False)
+def serve_js(filename: str) -> FileResponse:
+    path = STATIC_DIR / f"{filename}.js"
+    if not path.exists():
+        raise HTTPException(status_code=404)
+    return FileResponse(path, headers=_NO_CACHE, media_type="application/javascript")
+
+
+@app.get("/static/{filename}.css", include_in_schema=False)
+def serve_css(filename: str) -> FileResponse:
+    path = STATIC_DIR / f"{filename}.css"
+    if not path.exists():
+        raise HTTPException(status_code=404)
+    return FileResponse(path, headers=_NO_CACHE, media_type="text/css")
+
+
 app.mount("/static", StaticFiles(directory=STATIC_DIR), name="static")
 
 
 @app.get("/", include_in_schema=False)
 def welcome_shell() -> FileResponse:
-    return FileResponse(STATIC_DIR / "welcome.html")
+    return FileResponse(STATIC_DIR / "welcome.html", headers=_NO_CACHE)
 
 
 @app.get("/session", include_in_schema=False)
 def session_shell() -> FileResponse:
     """Child practice session UI — voice-first, tablet/TV optimised."""
-    return FileResponse(STATIC_DIR / "session.html")
+    return FileResponse(STATIC_DIR / "session.html", headers=_NO_CACHE)
 
 
 @app.get("/therapy", include_in_schema=False)
 def therapy_shell() -> FileResponse:
     """Parent / therapist monitoring dashboard."""
-    return FileResponse(STATIC_DIR / "therapy.html")
+    return FileResponse(STATIC_DIR / "therapy.html", headers=_NO_CACHE)
 
 
 @app.get("/console", include_in_schema=False)
@@ -223,17 +241,15 @@ async def deepgram_voice_stream(
 
     await websocket.accept()
 
-    # Browser sends webm/opus via MediaRecorder (native, no transcoding needed).
-    # Deepgram auto-detects the container; we hint with encoding=opus for clarity.
     dg_url = (
         "wss://api.deepgram.com/v1/listen"
-        "?model=nova-2-general"
+        "?model=flux-general-en"
         "&punctuate=true"
         "&interim_results=true"
-        "&endpointing=700"
+        "&endpointing=300"
         "&vad_events=true"
-        "&encoding=opus"
-        "&container=webm"
+        "&encoding=linear16"
+        "&sample_rate=16000"
         "&channels=1"
     )
     dg_headers = {"Authorization": f"Token {settings.deepgram_api_key}"}
@@ -286,7 +302,7 @@ async def deepgram_voice_stream(
                         if not transcript:
                             continue
 
-                        # Relay to browser as a structured frame matching DeepgramTranscriptFrameRequest
+                        # Relay to browser as a structured frame matching DeepgramTranscriptFrameRequest.
                         browser_frame = {
                             "transcript": transcript,
                             "is_final": is_final,
@@ -300,11 +316,6 @@ async def deepgram_voice_stream(
                         except Exception:
                             break
 
-                        # Also ingest into the backend transcript pipeline (fire-and-forget)
-                        if is_final or speech_final:
-                            asyncio.create_task(
-                                _ingest_deepgram_frame(session_id, child_id, browser_frame)
-                            )
                 except Exception:
                     pass
 
@@ -315,26 +326,6 @@ async def deepgram_voice_stream(
             await websocket.close(code=4500, reason="Deepgram connection failed")
         except Exception:
             pass
-
-
-async def _ingest_deepgram_frame(session_id: str, child_id: str, frame: dict) -> None:
-    """Silently ingest a Deepgram frame through the agentic pipeline for audit logging."""
-    from app.models import DeepgramTranscriptFrameRequest
-    try:
-        payload = DeepgramTranscriptFrameRequest(
-            session_id=session_id,
-            child_id=child_id,
-            transcript=frame["transcript"],
-            is_final=frame["is_final"],
-            speech_final=frame["speech_final"],
-            confidence=frame["confidence"],
-            start_ms=frame["start_ms"],
-            duration_ms=frame["duration_ms"],
-            attention_score=0.8,
-        )
-        orchestrator.ingest_deepgram_frame(payload)
-    except Exception:
-        pass
 
 
 @app.get("/architecture/providers", response_model=ArchitectureBlueprint)
