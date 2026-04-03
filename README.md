@@ -101,7 +101,7 @@ python -m pip install -r requirements.txt
 uvicorn app.main:app --reload
 ```
 
-Open the voice-first shell at `http://localhost:8000/`.
+Open the voice-first shell at `http://localhost:18200/` when running via Docker Compose, or `http://localhost:8000/` when running the app process directly.
 
 ## Repository mode
 
@@ -135,6 +135,10 @@ Required Supabase variables:
 - `POST /runtime/voice/tts/process`
 - `GET /runtime/voice/tts?session_id=...`
 - `POST /filter/preview`
+
+Docker integration note:
+
+When `speech-intellegence` runs in Docker alongside `speech-filters`, set `FILTER_SERVICE_URL=http://host.docker.internal:18100` and `FILTER_SERVICE_API_KEY` to the filter service key so the app routes all output filtering through the dedicated service.
 - `GET /profiles/child/child-1`
 - `GET /profiles/parent/caregiver-1`
 - `GET /profiles/environment/child-1`

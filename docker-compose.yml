@@ -1,0 +1,27 @@
+services:
+  # ── TalkBuddy core API + therapy UI ────────────────────────────────────────
+  app:
+    image: speech-intellegence-core
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: talkbuddy-app
+    restart: unless-stopped
+    ports:
+      - "18200:8000"        # separate host port from speech-filters on 18100
+    env_file:
+      - .env                # copy .env.example → .env and fill in your keys
+    environment:
+      APP_ENV: ${APP_ENV:-development}
+    healthcheck:
+      test: ["CMD", "python", "-c",
+             "import urllib.request; urllib.request.urlopen('http://localhost:8000/health')"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 10s
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "20m"
+        max-file: "5"

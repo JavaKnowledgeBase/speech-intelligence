@@ -249,3 +249,58 @@ class TestIngestAttempt:
         )
         attempt = gateway.ingest_attempt(payload)
         assert attempt.target_id == "target-xyz-unknown"
+
+
+class TestHttpFilterIntegration:
+    def test_filter_http_sends_owner_id_and_api_key(self, monkeypatch):
+        monkeypatch.setenv("FILTER_SERVICE_URL", "http://filter-service")
+        monkeypatch.setenv("FILTER_SERVICE_API_KEY", "secret-key")
+
+        captured = {}
+
+        class DummyResponse:
+            def raise_for_status(self):
+                return None
+
+            def json(self):
+                return {
+                    "filtered_text": "Quiet try. Nice work.",
+                    "style_tags": ["calm"],
+                    "filter_trace": [{"filter_name": "calming_filter"}],
+                    "confidence": 0.92,
+                    "architecture": "rules_only",
+                }
+
+        class DummyClient:
+            def __init__(self, timeout):
+                captured["timeout"] = timeout
+
+            def __enter__(self):
+                return self
+
+            def __exit__(self, exc_type, exc, tb):
+                return False
+
+            def post(self, url, json, headers):
+                captured["url"] = url
+                captured["json"] = json
+                captured["headers"] = headers
+                return DummyResponse()
+
+        import httpx
+        monkeypatch.setattr(httpx, "Client", DummyClient)
+
+        gateway = IntegrationGateway()
+        message, trace = gateway.filter_output(
+            "child",
+            "Great job.",
+            owner_id="child-1",
+            context="success",
+        )
+
+        assert message.text == "Quiet try. Nice work."
+        assert trace[0].provider == "speech-filters-service"
+        assert captured["url"] == "http://filter-service/filter"
+        assert captured["json"]["owner_id"] == "child-1"
+        assert "child_id" not in captured["json"]
+        assert captured["headers"]["x-service-api-key"] == "secret-key"

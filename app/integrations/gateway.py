@@ -49,6 +49,7 @@ class IntegrationGateway:
     def __init__(self) -> None:
         self._filter_url = os.getenv("FILTER_SERVICE_URL", "").rstrip("/")
         self._filter_timeout = int(os.getenv("FILTER_SERVICE_TIMEOUT", "3"))
+        self._filter_api_key = os.getenv("FILTER_SERVICE_API_KEY", "")
 
     # ── Profile access ────────────────────────────────────────────────────────
 
@@ -123,11 +124,15 @@ class IntegrationGateway:
             },
         }
         if owner_id:
-            payload["child_id"] = owner_id
+            payload["owner_id"] = owner_id
+
+        headers = {}
+        if self._filter_api_key:
+            headers["x-service-api-key"] = self._filter_api_key
 
         try:
             with httpx.Client(timeout=self._filter_timeout) as client:
-                resp = client.post(f"{self._filter_url}/filter", json=payload)
+                resp = client.post(f"{self._filter_url}/filter", json=payload, headers=headers)
                 resp.raise_for_status()
                 data = resp.json()
             message = FilteredMessage(
