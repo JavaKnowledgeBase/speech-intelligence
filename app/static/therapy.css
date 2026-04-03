@@ -654,6 +654,7 @@ button, select, input { font: inherit; }
   justify-content: center;
   z-index: 200;
 }
+.overlay[hidden] { display: none !important; }
 
 .overlay-content {
   text-align: center;
