@@ -209,6 +209,18 @@ button, select, input { font: inherit; }
   max-height: 92vh;
   overflow-y: auto;
   scrollbar-width: none;
+  cursor: pointer;
+  animation: wizard-card-pulse 2.4s ease-in-out infinite;
+}
+
+.wizard-card.wizard-active {
+  cursor: default;
+  animation: none;
+}
+
+@keyframes wizard-card-pulse {
+  0%, 100% { box-shadow: var(--shadow); }
+  50%       { box-shadow: 0 8px 60px var(--brand-glow), var(--shadow); }
 }
 
 .wizard-card::-webkit-scrollbar { display: none; }

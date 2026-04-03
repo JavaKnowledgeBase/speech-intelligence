@@ -324,17 +324,23 @@ function speakWebSpeech(text, onDone) {
   if (!('speechSynthesis' in window)) { onDone(); return; }
   window.speechSynthesis.cancel();
   const utt = new SpeechSynthesisUtterance(text);
-  utt.rate   = 0.88;   // slightly slower — aids comprehension for children
+  utt.rate   = 0.88;
   utt.pitch  = 1.05;
   utt.volume = 1.0;
-  // Prefer a friendly en-US voice if available
   const voices = window.speechSynthesis.getVoices();
   const preferred = voices.find(v => v.lang.startsWith('en') && !v.localService === false)
     || voices.find(v => v.lang.startsWith('en'))
     || null;
   if (preferred) utt.voice = preferred;
-  utt.onend = onDone;
-  utt.onerror = () => onDone();
+
+  // Safety timeout: if the browser never fires onend (e.g. blocked without gesture),
+  // resolve after max(text length * 80ms, 1500ms) so the wizard always continues.
+  const maxMs = Math.max(text.length * 80, 1500);
+  const guard = setTimeout(() => { onDone(); }, maxMs);
+
+  const finish = () => { clearTimeout(guard); onDone(); };
+  utt.onend  = finish;
+  utt.onerror = finish;
   window.speechSynthesis.speak(utt);
 }
 
@@ -902,12 +908,13 @@ async function runWizard() {
   wHideLetters();
   wSetMic('hidden');
   el.wizardConfirm.hidden = true;
-  el.wizardMascot.className = 'mascot idle';
+  el.wizardMascot.className = 'mascot speak';
 
   // Step 1 — Welcome
   const welcome = 'Welcome to TalkBuddy!';
   el.wizardPrompt.textContent = welcome;
   await speak(welcome);
+  el.wizardMascot.className = 'mascot idle';
 
   // Step 2–4 — Child first name (with spelling + confirm)
   const firstName = await wCollectName("Please say the child's first name.", 'first name');
@@ -1190,12 +1197,6 @@ async function init() {
   // Detect providers asynchronously (don't block UI)
   detectProviders();
 
-  // Kick off the voice welcome wizard automatically
-  runWizard().catch(() => {
-    // Wizard failed (e.g. no mic) — show manual fallback
-    showWizardManualFallback();
-  });
-
   // Warm up speech synthesis voices list
   if ('speechSynthesis' in window) {
     window.speechSynthesis.getVoices();
@@ -1221,6 +1222,22 @@ function showWizardManualFallback() {
 }
 
 el.wizardSkipBtn.addEventListener('click', showWizardManualFallback);
+
+// The whole wizard card acts as the "tap to begin" target.
+// A single tap anywhere on it satisfies the browser's user-gesture requirement
+// for speech synthesis and microphone access, then launches the wizard.
+el.wizardCard.addEventListener('click', function startWizardOnce() {
+  el.wizardCard.removeEventListener('click', startWizardOnce);
+  el.wizardCard.classList.add('wizard-active');
+  el.wizardSkipBtn.style.opacity = '1';
+  // Warm up voices (user gesture now active)
+  if ('speechSynthesis' in window) {
+    const warmup = new SpeechSynthesisUtterance('');
+    window.speechSynthesis.speak(warmup);
+    window.speechSynthesis.cancel();
+  }
+  runWizard().catch(() => showWizardManualFallback());
+}, { once: true });
 
 el.beginSessionBtn.addEventListener('click', () => startSession());
 
