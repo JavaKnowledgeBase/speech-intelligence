@@ -21,7 +21,6 @@ const S = {
   COMPLETED: "completed",
 };
 
-const COACHING_TO_LISTENING_GAP_MS = 90;
 const PROMPT_ECHO_GUARD_MS = 160;
 const NO_PROMPT_ECHO_GUARD_MS = 60;
 
@@ -45,6 +44,8 @@ const state = {
   deepgramSink: null,
   deepgramReady: false,
   deepgramFinalPending: false,
+  turnCaptureEnabled: false,
+  ttsActive: false,
   currentTarget: null,
 };
 
@@ -197,11 +198,22 @@ function speak(text) {
       resolve();
       return;
     }
+    state.ttsActive = true;
     if (state.ttsBackend) {
       const audio = new Audio(`/runtime/voice/tts/speak?text=${encodeURIComponent(text)}`);
-      audio.onended = resolve;
-      audio.onerror = () => speakBrowser(text, resolve);
-      audio.play().catch(() => speakBrowser(text, resolve));
+      const finish = () => {
+        state.ttsActive = false;
+        resolve();
+      };
+      audio.onended = finish;
+      audio.onerror = () => {
+        state.ttsActive = false;
+        speakBrowser(text, resolve);
+      };
+      audio.play().catch(() => {
+        state.ttsActive = false;
+        speakBrowser(text, resolve);
+      });
       return;
     }
     speakBrowser(text, resolve);
@@ -209,7 +221,9 @@ function speak(text) {
 }
 
 function speakBrowser(text, done) {
+  state.ttsActive = true;
   if (!("speechSynthesis" in window)) {
+    state.ttsActive = false;
     done();
     return;
   }
@@ -230,6 +244,7 @@ function speakBrowser(text, done) {
   const guard = setTimeout(() => done(), Math.max(estimatedMs, 2000));
   const finish = () => {
     clearTimeout(guard);
+    state.ttsActive = false;
     done();
   };
   utterance.onend = finish;
@@ -238,6 +253,7 @@ function speakBrowser(text, done) {
     synth.speak(utterance);
   } catch {
     clearTimeout(guard);
+    state.ttsActive = false;
     done();
   }
 }
@@ -247,6 +263,25 @@ function initBrowserSTT() {
 }
 
 const browserSpeechReady = initBrowserSTT();
+
+function canAcceptTranscript() {
+  return state.turnCaptureEnabled && !state.ttsActive && Date.now() >= state.listenReadyAt;
+}
+
+function openTurnCapture(messageWasSpoken) {
+  state.turnCaptureEnabled = true;
+  state.deepgramFinalPending = false;
+  state.listenReadyAt = Date.now() + (messageWasSpoken ? PROMPT_ECHO_GUARD_MS : NO_PROMPT_ECHO_GUARD_MS);
+  transitionTo(S.LISTENING);
+  setMascot("listen");
+  setMic("listening", "Mic live");
+  el.interimDisplay.textContent = "";
+}
+
+function closeTurnCapture() {
+  state.turnCaptureEnabled = false;
+  state.deepgramFinalPending = false;
+}
 
 function startBrowserListening() {
   if (!browserSpeechReady) return;
@@ -263,7 +298,7 @@ function startBrowserListening() {
     const transcript = results.map((result) => result[0].transcript).join("");
     el.interimDisplay.textContent = transcript;
     if (!results[results.length - 1].isFinal || state.sessionState !== S.LISTENING) return;
-    if (Date.now() < state.listenReadyAt) {
+    if (!canAcceptTranscript()) {
       el.interimDisplay.textContent = "";
       return;
     }
@@ -361,20 +396,6 @@ async function closeDeepgram() {
   state.deepgramWs = null;
 }
 
-async function suspendDeepgramCapture() {
-  if (state.deepgramAudioContext?.state === "running") {
-    try { await state.deepgramAudioContext.suspend(); } catch {}
-  }
-  state.deepgramFinalPending = false;
-}
-
-async function resumeDeepgramCapture() {
-  if (state.deepgramAudioContext?.state === "suspended") {
-    try { await state.deepgramAudioContext.resume(); } catch {}
-  }
-  state.deepgramFinalPending = false;
-}
-
 async function tryInitDeepgramStream() {
   if (!state.sessionId || !state.childId) return false;
 
@@ -434,7 +455,6 @@ async function tryInitDeepgramStream() {
   sink.gain.value = 0;
 
   processor.onaudioprocess = (event) => {
-    if (state.sessionState !== S.LISTENING) return;
     if (!state.deepgramWs || state.deepgramWs.readyState !== WebSocket.OPEN) return;
     const pcmFrame = encodePcm16(event.inputBuffer.getChannelData(0), event.inputBuffer.sampleRate);
     state.deepgramWs.send(pcmFrame);
@@ -443,7 +463,7 @@ async function tryInitDeepgramStream() {
   source.connect(processor);
   processor.connect(sink);
   sink.connect(audioContext.destination);
-  await audioContext.suspend().catch(() => {});
+  await audioContext.resume().catch(() => {});
 
   state.deepgramWs = ws;
   state.deepgramMicStream = micStream;
@@ -461,10 +481,12 @@ async function tryInitDeepgramStream() {
     try {
       const frame = JSON.parse(event.data);
       if (!frame.transcript) return;
-      el.interimDisplay.textContent = frame.transcript;
+      if (canAcceptTranscript()) {
+        el.interimDisplay.textContent = frame.transcript;
+      }
       if (!(frame.is_final || frame.speech_final)) return;
       if (state.sessionState !== S.LISTENING || state.deepgramFinalPending) return;
-      if (Date.now() < state.listenReadyAt) {
+      if (!canAcceptTranscript()) {
         el.interimDisplay.textContent = "";
         return;
       }
@@ -485,13 +507,12 @@ async function tryInitDeepgramStream() {
   return true;
 }
 
-function startListening() {
-  state.deepgramFinalPending = false;
+function ensureSessionMicLive() {
   if (state.deepgramReady) {
-    resumeDeepgramCapture();
+    setMic(state.sessionState === S.LISTENING ? "listening" : "idle", "Mic live");
     return;
   }
-  if (browserSpeechReady) {
+  if (browserSpeechReady && !state.recognitionActive) {
     el.sttBadge.textContent = "STT: Browser";
     el.sttBadge.classList.remove("mock");
     startBrowserListening();
@@ -500,40 +521,38 @@ function startListening() {
   el.sttBadge.textContent = "STT: Unavailable";
 }
 
+function startListening() {
+  ensureSessionMicLive();
+}
+
 function stopListening() {
+  closeTurnCapture();
   state.listenToken += 1;
   state.recognitionActive = false;
   if (state.recognition) {
     try { state.recognition.abort(); } catch {}
     state.recognition = null;
   }
-  suspendDeepgramCapture();
 }
 
 async function coachAndListen(message) {
   transitionTo(S.COACHING);
+  closeTurnCapture();
+  setMic("idle", "Mic live");
   if (message) {
     showBubble(message);
     setMascot("speak");
-    setMic("idle", "Almost ready...");
     await speak(message);
     hideBubble();
   }
   if (state.sessionState !== S.COACHING) return;
-  setMic("idle", "Your turn...");
-  await new Promise((resolve) => setTimeout(resolve, COACHING_TO_LISTENING_GAP_MS));
-  if (state.sessionState !== S.COACHING) return;
-  transitionTo(S.LISTENING);
-  setMascot("listen");
-  setMic("listening", "Listening...");
-  el.interimDisplay.textContent = "";
-  state.listenReadyAt = Date.now() + (message ? PROMPT_ECHO_GUARD_MS : NO_PROMPT_ECHO_GUARD_MS);
-  startListening();
+  openTurnCapture(Boolean(message));
 }
 
 async function handleTranscript(transcript, confidence = null, source = "stt_stream") {
   if (state.sessionState !== S.LISTENING) return;
   transitionTo(S.PROCESSING);
+  closeTurnCapture();
   stopListening();
   el.interimDisplay.textContent = transcript;
   setMascot("idle");
@@ -556,17 +575,15 @@ async function handleTranscript(transcript, confidence = null, source = "stt_str
       }),
     });
   } catch {
-    transitionTo(S.LISTENING);
-    setMic("listening", "Listening...");
-    startListening();
+    openTurnCapture(false);
+    ensureSessionMicLive();
     return;
   }
 
   const evaluation = result.evaluation;
   if (!evaluation) {
-    transitionTo(S.LISTENING);
-    setMic("listening", "Listening...");
-    startListening();
+    openTurnCapture(false);
+    ensureSessionMicLive();
     return;
   }
 
@@ -617,7 +634,7 @@ async function handleRetry(evaluation) {
 
 async function handleEscalation(evaluation) {
   transitionTo(S.ESCALATED);
-  stopListening();
+  closeTurnCapture();
   setMascot("idle");
   setMic("idle", "");
   await speak(evaluation.feedback || "A grown-up will help you now.");
@@ -627,6 +644,7 @@ async function handleEscalation(evaluation) {
 
 async function handleComplete() {
   transitionTo(S.COMPLETED);
+  closeTurnCapture();
   stopListening();
   releaseWakeLock();
   await completeSessionApi();
@@ -646,7 +664,7 @@ function updateTarget(word, cue) {
 async function init() {
   el.childName.textContent = state.childName;
   updateStars(0);
-  setMic("idle", "Starting...");
+  setMic("idle", "Mic live");
   setMascot("idle");
   el.sttBadge.textContent = browserSpeechReady ? "STT: Browser Backup" : "STT: Connecting";
 
@@ -708,6 +726,8 @@ async function init() {
     el.sttBadge.classList.remove("mock");
   }
 
+  ensureSessionMicLive();
+
   if (sessionData) {
     updateTarget(sessionData.target_text, sessionData.cue);
     await postCheckpoint("turn_started", 0, "session opened from welcome");
@@ -720,6 +740,7 @@ async function init() {
 }
 
 async function exitSession() {
+  closeTurnCapture();
   stopListening();
   releaseWakeLock();
   await closeDeepgram().catch(() => {});
