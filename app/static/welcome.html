@@ -473,13 +473,43 @@
         });
       }
 
+      async function matchAndStartSession() {
+        // Try to match child by name from backend, then create a session
+        try {
+          const children = await fetch('/children').then(r => r.json());
+          const fn = (welcomeData.childFirstNameSpelling || welcomeData.childFirstNameAudioText || '').toLowerCase();
+          const ln = (welcomeData.childLastNameSpelling  || welcomeData.childLastNameAudioText  || '').toLowerCase();
+          const matched = children.find(c => {
+            const parts = c.name.toLowerCase().split(/\s+/);
+            return parts[0].startsWith(fn.charAt(0) || 'x');
+          }) || children[0];
+
+          if (matched) {
+            const session = await fetch('/session/start', {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({ child_id: matched.child_id }),
+            }).then(r => r.json());
+
+            sessionStorage.setItem('tb_session_id', session.session_id);
+            sessionStorage.setItem('tb_child_id',   matched.child_id);
+            sessionStorage.setItem('tb_child_name', matched.name);
+            sessionStorage.setItem('tb_session_data', JSON.stringify(session));
+          }
+        } catch (e) {
+          // Network unavailable — session page will show a fallback
+        }
+        sessionStorage.setItem('talkbuddy.welcomeSession', JSON.stringify(welcomeData));
+      }
+
       function finishWelcome() {
         saveSession();
-        speak(activePrompt, () => {
-          setSpeaking(false, 'Welcome session complete. Opening the session page...');
+        speak(activePrompt, async () => {
+          setSpeaking(false, 'Starting your session…');
+          await matchAndStartSession();
           window.setTimeout(() => {
             window.location.href = '/session';
-          }, 2000);
+          }, 800);
         });
       }
 

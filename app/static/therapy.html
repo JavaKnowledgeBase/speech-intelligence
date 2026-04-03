@@ -2,258 +2,28 @@
 <html lang="en">
 <head>
   <meta charset="UTF-8" />
-  <!--
-    user-scalable=no: prevents accidental zoom during touch taps in child mode.
-    viewport-fit=cover: fills TV/tablet notches and rounded corners.
-  -->
-  <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no, viewport-fit=cover" />
-  <meta name="apple-mobile-web-app-capable" content="yes" />
-  <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
   <meta name="theme-color" content="#0d9488" />
-  <title>TalkBuddy — Speech Practice</title>
+  <title>TalkBuddy — Therapist View</title>
   <link rel="stylesheet" href="/static/therapy.css" />
 </head>
 <body>
 
-<!-- ══════════════════════════════════════════════════════════════════════
-     CHILD MODE
-     Default view. Covers the full screen. Voice-first, minimal text.
-══════════════════════════════════════════════════════════════════════ -->
-<div id="child-mode" class="mode-screen">
-
-  <!-- ── Setup screen: voice wizard ── -->
-  <div id="setup-screen" class="setup-screen">
-    <div class="wizard-card" id="wizard-card">
-
-      <!-- Animated lips mascot (SVG, no face) -->
-      <div class="lips-mascot" id="wizard-mascot" aria-hidden="true">
-        <svg id="lips-svg" viewBox="0 0 200 100" xmlns="http://www.w3.org/2000/svg">
-          <!-- Upper lip -->
-          <path id="lip-upper"
-            d="M 20 50 C 50 20, 80 15, 100 22 C 120 15, 150 20, 180 50
-               C 155 40, 130 36, 100 38 C 70 36, 45 40, 20 50 Z"
-            fill="#e05c7a" stroke="#c0445f" stroke-width="1.5"/>
-          <!-- Cupid's bow highlight -->
-          <path d="M 70 28 Q 100 18 130 28" fill="none" stroke="#f08098" stroke-width="2" stroke-linecap="round"/>
-          <!-- Lower lip -->
-          <path id="lip-lower"
-            d="M 20 50 C 45 60, 70 70, 100 72 C 130 70, 155 60, 180 50
-               C 155 56, 130 62, 100 64 C 70 62, 45 56, 20 50 Z"
-            fill="#d44060" stroke="#b03050" stroke-width="1.5"/>
-          <!-- Lower lip highlight -->
-          <ellipse cx="100" cy="62" rx="30" ry="5" fill="#e87090" opacity="0.4"/>
-          <!-- Teeth (shown when open) -->
-          <clipPath id="mouth-clip">
-            <path id="mouth-clip-path"
-              d="M 30 50 C 60 56, 80 60, 100 61 C 120 60, 140 56, 170 50
-                 C 155 44, 130 40, 100 40 C 70 40, 45 44, 30 50 Z"/>
-          </clipPath>
-          <rect id="teeth" x="40" y="45" width="120" height="14" rx="3"
-            fill="white" clip-path="url(#mouth-clip)" opacity="0"/>
-        </svg>
-      </div>
-
-      <!-- Step progress pills -->
-      <div class="wizard-steps" aria-label="Setup progress">
-        <span class="wz-step active" id="wz-step-child">Child Name</span>
-        <span class="wz-step" id="wz-step-caregiver">Caregiver</span>
-        <span class="wz-step" id="wz-step-launch">Let's Go!</span>
-      </div>
-
-      <!-- Spoken prompt shown as text -->
-      <p class="wizard-prompt" id="wizard-prompt" aria-live="polite">Welcome to TalkBuddy! Tap anywhere to begin.</p>
-
-      <!-- Large letter / name display -->
-      <div class="wizard-name-display" id="wizard-name-display" hidden aria-live="polite">
-        <div class="wizard-letters" id="wizard-letters"></div>
-      </div>
-
-      <!-- Interim transcript while listening -->
-      <div class="wizard-interim" id="wizard-interim" aria-live="polite" aria-atomic="true"></div>
-
-      <!-- Mic ring -->
-      <div class="wizard-mic-area" id="wizard-mic-area" hidden>
-        <div class="mic-ring idle" id="wizard-mic-ring" aria-hidden="true">
-          <span class="mic-icon">🎤</span>
-        </div>
-        <p class="mic-label" id="wizard-mic-label">Listening…</p>
-      </div>
-
-      <!-- Yes / No confirmation buttons -->
-      <div class="wizard-confirm" id="wizard-confirm" hidden role="group" aria-label="Confirm name">
-        <button class="big-btn wizard-yes-btn" id="wizard-yes-btn" aria-label="Yes, that is correct">
-          ✓ Yes, correct!
-        </button>
-        <button class="big-btn wizard-no-btn" id="wizard-no-btn" aria-label="No, try again">
-          ✗ No, try again
-        </button>
-      </div>
-
-      <!-- Manual fallback (hidden until skip) -->
-      <div id="wizard-manual" class="wizard-manual" hidden>
-        <label class="setup-field">
-          <span>Who's practicing today?</span>
-          <select id="child-select" class="child-select" aria-label="Select child">
-            <option value="">Loading…</option>
-          </select>
-        </label>
-        <button id="begin-session-btn" class="big-btn begin-btn" disabled>
-          <span aria-hidden="true">▶</span> Start Practice
-        </button>
-      </div>
-
-      <!-- Bottom links -->
-      <div class="wizard-footer">
-        <button class="link-btn" id="wizard-skip-btn" style="opacity:0;transition:opacity 0.5s">
-          Skip — choose manually
-        </button>
-        <button class="link-btn" id="switch-to-caregiver-btn">
-          Caregiver / Clinician View
-        </button>
-      </div>
-
-    </div>
-  </div>
-
-  <!-- ── Session screen (active practice loop) ── -->
-  <div id="session-screen" class="session-screen" hidden>
-
-    <!-- Header bar -->
-    <header class="session-header" role="banner">
-      <div class="header-left">
-        <span class="child-name-badge" id="session-child-name" aria-live="polite">—</span>
-      </div>
-
-      <div class="header-center" aria-label="Reward stars">
-        <div class="stars-display" id="stars-display" role="img" aria-label="0 of 5 stars earned">
-          <span class="star" aria-hidden="true">☆</span>
-          <span class="star" aria-hidden="true">☆</span>
-          <span class="star" aria-hidden="true">☆</span>
-          <span class="star" aria-hidden="true">☆</span>
-          <span class="star" aria-hidden="true">☆</span>
-        </div>
-      </div>
-
-      <div class="header-right">
-        <span class="provider-badge mock" id="stt-badge" title="Speech-to-text provider">STT</span>
-        <span class="provider-badge mock" id="tts-badge" title="Text-to-speech provider">TTS</span>
-        <button class="icon-btn" id="caregiver-mode-btn" title="Switch to caregiver view" aria-label="Caregiver view">
-          <span aria-hidden="true">👨‍⚕️</span>
-        </button>
-        <button class="icon-btn" id="end-session-btn" title="End session" aria-label="End session">
-          <span aria-hidden="true">✕</span>
-        </button>
-      </div>
-    </header>
-
-    <!-- Main practice arena -->
-    <main class="practice-arena" role="main">
-
-      <!-- Left: mascot + status -->
-      <div class="mascot-column">
-        <div class="mascot lips-mascot idle" id="mascot" role="img" aria-label="TalkBuddy mascot">
-          <svg viewBox="0 0 200 100" xmlns="http://www.w3.org/2000/svg">
-            <path class="lip-upper-sess"
-              d="M 20 50 C 50 20, 80 15, 100 22 C 120 15, 150 20, 180 50
-                 C 155 40, 130 36, 100 38 C 70 36, 45 40, 20 50 Z"
-              fill="#e05c7a" stroke="#c0445f" stroke-width="1.5"/>
-            <path d="M 70 28 Q 100 18 130 28" fill="none" stroke="#f08098" stroke-width="2" stroke-linecap="round"/>
-            <path class="lip-lower-sess"
-              d="M 20 50 C 45 60, 70 70, 100 72 C 130 70, 155 60, 180 50
-                 C 155 56, 130 62, 100 64 C 70 62, 45 56, 20 50 Z"
-              fill="#d44060" stroke="#b03050" stroke-width="1.5"/>
-            <ellipse cx="100" cy="62" rx="30" ry="5" fill="#e87090" opacity="0.4"/>
-          </svg>
-        </div>
-
-        <div class="mascot-bubble" id="mascot-bubble" hidden aria-live="polite" aria-atomic="true">
-          <p id="mascot-bubble-text"></p>
-        </div>
-
-        <p class="mascot-status" id="mascot-status" aria-live="polite">Getting ready…</p>
-      </div>
-
-      <!-- Right: target word + mic -->
-      <div class="target-column">
-        <p class="prompt-label" id="prompt-label">Say this word:</p>
-
-        <div class="target-card" id="target-card" aria-label="Practice target">
-          <div class="target-icon" id="target-icon" aria-hidden="true">💬</div>
-          <div class="target-word" id="target-word" aria-live="polite">—</div>
-        </div>
-
-        <p class="target-cue" id="target-cue" aria-live="polite"></p>
-
-        <!-- Microphone indicator -->
-        <div class="mic-area" aria-label="Microphone status">
-          <div class="mic-ring idle" id="mic-ring" aria-hidden="true">
-            <span class="mic-icon">🎤</span>
-          </div>
-          <p class="mic-label" id="mic-label" aria-live="assertive">Waiting…</p>
-        </div>
-
-        <!-- Interim transcript (shown while child is speaking) -->
-        <div class="interim-display" id="interim-display" aria-live="polite" aria-atomic="false"></div>
-      </div>
-    </main>
-
-    <!-- ── Celebration overlay (on success) ── -->
-    <div class="overlay" id="celebration-overlay" hidden role="alertdialog" aria-label="Great job!">
-      <div class="overlay-content">
-        <div class="overlay-emoji" id="celebration-emoji" aria-hidden="true">🌟</div>
-        <p class="overlay-title" id="celebration-title">Great job!</p>
-        <p class="overlay-sub" id="celebration-sub"></p>
-      </div>
-    </div>
-
-    <!-- ── Help overlay (on escalation) ── -->
-    <div class="overlay" id="help-overlay" hidden role="alertdialog" aria-label="Help needed">
-      <div class="overlay-content">
-        <div class="overlay-emoji" aria-hidden="true">🤝</div>
-        <p class="overlay-title">A grown-up will help now.</p>
-        <p class="overlay-sub" id="help-message"></p>
-        <button class="overlay-btn" id="dismiss-help-btn">OK</button>
-      </div>
-    </div>
-
-    <!-- ── Completed overlay ── -->
-    <div class="overlay" id="completed-overlay" hidden role="alertdialog" aria-label="Session complete">
-      <div class="overlay-content">
-        <div class="overlay-emoji" aria-hidden="true">🏆</div>
-        <p class="overlay-title">Session done!</p>
-        <p class="overlay-sub" id="completed-sub"></p>
-        <button class="overlay-btn" id="start-over-btn">Practice Again</button>
-      </div>
-    </div>
-
-  </div><!-- /session-screen -->
-</div><!-- /child-mode -->
-
-
-<!-- ══════════════════════════════════════════════════════════════════════
-     CAREGIVER MODE
-     Dashboard: alerts, session status, progress, clinician notes.
-     Accessible via header button from session screen or setup screen.
-══════════════════════════════════════════════════════════════════════ -->
-<div id="caregiver-mode" class="mode-screen" hidden>
+<div id="caregiver-mode" class="mode-screen" style="display:flex">
 
   <header class="caregiver-header" role="banner">
     <div class="caregiver-header-left">
-      <button class="icon-btn" id="back-to-child-btn" aria-label="Back to practice">
-        <span aria-hidden="true">◀</span>
-      </button>
       <h1 class="caregiver-title">TalkBuddy</h1>
-      <span class="caregiver-sub">Caregiver View</span>
+      <span class="caregiver-sub">Therapist / Caregiver View</span>
     </div>
-
     <div class="caregiver-header-right">
       <label class="child-picker-label">
         <span>Child:</span>
-        <select id="caregiver-child-select" aria-label="Select child for caregiver view">
-          <option value="">Select child…</option>
+        <select id="caregiver-child-select" aria-label="Select child">
+          <option value="">Loading…</option>
         </select>
       </label>
-      <button class="icon-btn" id="refresh-caregiver-btn" aria-label="Refresh dashboard">
+      <button class="icon-btn" id="refresh-btn" aria-label="Refresh dashboard">
         <span aria-hidden="true">↻</span>
       </button>
     </div>
@@ -261,54 +31,148 @@
 
   <main class="caregiver-grid" role="main">
 
-    <!-- Current session status -->
-    <section class="care-panel session-status-panel" aria-labelledby="session-panel-title">
-      <h2 class="panel-title" id="session-panel-title">
-        <span class="panel-icon" aria-hidden="true">📋</span>
-        Current Session
+    <section class="care-panel session-status-panel" aria-labelledby="panel-session-title">
+      <h2 class="panel-title" id="panel-session-title">
+        <span class="panel-icon" aria-hidden="true">📋</span> Current Session
       </h2>
-      <div id="session-status-panel-content">
-        <p class="care-empty">No active session.</p>
-      </div>
+      <div id="session-panel-content"><p class="care-empty">No active session.</p></div>
     </section>
 
-    <!-- Alerts -->
-    <section class="care-panel alerts-panel" aria-labelledby="alerts-panel-title">
-      <h2 class="panel-title" id="alerts-panel-title">
-        <span class="panel-icon" aria-hidden="true">⚠️</span>
-        Alerts
-        <span class="badge-count zero" id="alert-count-badge" aria-live="polite">0</span>
+    <section class="care-panel alerts-panel" aria-labelledby="panel-alerts-title">
+      <h2 class="panel-title" id="panel-alerts-title">
+        <span class="panel-icon" aria-hidden="true">⚠️</span> Alerts
+        <span class="badge-count zero" id="alert-badge" aria-live="polite">0</span>
       </h2>
-      <div id="alerts-panel-content" aria-live="polite">
-        <p class="care-empty">No alerts. All good!</p>
-      </div>
+      <div id="alerts-panel-content" aria-live="polite"><p class="care-empty">No alerts. All good!</p></div>
     </section>
 
-    <!-- Progress -->
-    <section class="care-panel progress-panel" aria-labelledby="progress-panel-title">
-      <h2 class="panel-title" id="progress-panel-title">
-        <span class="panel-icon" aria-hidden="true">📈</span>
-        Progress
+    <section class="care-panel progress-panel" aria-labelledby="panel-progress-title">
+      <h2 class="panel-title" id="panel-progress-title">
+        <span class="panel-icon" aria-hidden="true">📈</span> Progress
       </h2>
-      <div id="progress-panel-content">
-        <p class="care-empty">Select a child above to view progress.</p>
-      </div>
+      <div id="progress-panel-content"><p class="care-empty">Select a child above to view progress.</p></div>
     </section>
 
-    <!-- Clinician queue -->
-    <section class="care-panel clinician-panel" aria-labelledby="clinician-panel-title">
-      <h2 class="panel-title" id="clinician-panel-title">
-        <span class="panel-icon" aria-hidden="true">🩺</span>
-        Clinician Notes
+    <section class="care-panel clinician-panel" aria-labelledby="panel-clinician-title">
+      <h2 class="panel-title" id="panel-clinician-title">
+        <span class="panel-icon" aria-hidden="true">🩺</span> Clinician Notes
       </h2>
-      <div id="clinician-panel-content">
-        <p class="care-empty">No pending clinician reviews.</p>
-      </div>
+      <div id="clinician-panel-content"><p class="care-empty">No pending reviews.</p></div>
     </section>
 
   </main>
-</div><!-- /caregiver-mode -->
+</div>
 
-<script src="/static/therapy.js" defer></script>
+<script>
+'use strict';
+
+function esc(t) {
+  return String(t ?? '').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
+}
+
+async function api(path) {
+  const r = await fetch(path);
+  if (!r.ok) throw new Error(path + ' ' + r.status);
+  return r.json();
+}
+
+async function loadDashboard(childId) {
+  if (!childId) return;
+  const [alerts, report] = await Promise.all([
+    api(`/caregiver/alerts?caregiver_id=${encodeURIComponent(childId)}`).catch(() => []),
+    api(`/reports/child/${encodeURIComponent(childId)}`).catch(() => null),
+  ]);
+
+  // Alerts
+  const alertEl = document.getElementById('alerts-panel-content');
+  const badge   = document.getElementById('alert-badge');
+  if (!alerts.length) {
+    alertEl.innerHTML = '<p class="care-empty">No alerts. All good!</p>';
+    badge.textContent = '0'; badge.classList.add('zero');
+  } else {
+    badge.textContent = alerts.length; badge.classList.remove('zero');
+    alertEl.innerHTML = alerts.map(a => `
+      <div class="alert-item" data-id="${esc(a.alert_id)}">
+        <span class="alert-reason">${esc(a.reason.replace(/_/g,' '))}</span>
+        <p class="alert-message">${esc(a.message)}</p>
+        <span class="alert-meta">${new Date(a.created_at).toLocaleString()}</span>
+        <button class="ack-btn" data-id="${esc(a.alert_id)}">Acknowledge</button>
+      </div>`).join('');
+    alertEl.querySelectorAll('.ack-btn').forEach(btn => {
+      btn.addEventListener('click', async () => {
+        await fetch(`/caregiver/alerts/${btn.dataset.id}/acknowledge`, {method:'POST'}).catch(()=>{});
+        btn.closest('.alert-item').remove();
+        const rem = alertEl.querySelectorAll('.alert-item').length;
+        badge.textContent = rem || '0';
+        if (!rem) { alertEl.innerHTML = '<p class="care-empty">No alerts. All good!</p>'; badge.classList.add('zero'); }
+      });
+    });
+  }
+
+  // Session status
+  const sessEl = document.getElementById('session-panel-content');
+  if (report?.recent_sessions?.length) {
+    const s = report.recent_sessions[0];
+    const statusLabel = {active:'Active',completed:'Completed',escalated:'⚠ Escalated'}[s.status] || s.status;
+    sessEl.innerHTML = `
+      <div class="stat-row"><span>Status</span><span class="stat-value">${statusLabel}</span></div>
+      <div class="stat-row"><span>Target</span><span class="stat-value">${esc(s.current_target)}</span></div>
+      <div class="stat-row"><span>Points</span><span class="stat-value">⭐ ${s.reward_points}</span></div>
+      <div class="stat-row"><span>Started</span><span class="stat-value" style="font-size:var(--sz-base)">${new Date(s.started_at).toLocaleString()}</span></div>`;
+  } else {
+    sessEl.innerHTML = '<p class="care-empty">No recent sessions.</p>';
+  }
+
+  // Progress
+  const progEl = document.getElementById('progress-panel-content');
+  if (report?.progress?.length) {
+    progEl.innerHTML = [...report.progress]
+      .sort((a,b) => b.mastery_score - a.mastery_score)
+      .slice(0, 10)
+      .map(p => {
+        const pct = Math.round(p.mastery_score * 100);
+        return `<div class="progress-item">
+          <span class="progress-word">${esc(p.target_text)}</span>
+          <span class="progress-pct">${pct}%</span>
+          <div class="progress-bar-track"><div class="progress-bar-fill" style="width:${pct}%"></div></div>
+        </div>`;
+      }).join('');
+  } else {
+    progEl.innerHTML = '<p class="care-empty">No practice data yet.</p>';
+  }
+
+  // Clinician
+  if (report?.child?.clinician_id) {
+    const reviews = await api(`/clinician/queue?clinician_id=${encodeURIComponent(report.child.clinician_id)}`).catch(() => []);
+    const clinEl = document.getElementById('clinician-panel-content');
+    clinEl.innerHTML = reviews.length
+      ? reviews.map(r => `<div class="review-item">
+          <span class="review-priority ${esc(r.priority)}">${esc(r.priority.toUpperCase())} PRIORITY</span>
+          <p class="review-summary">${esc(r.summary)}</p>
+        </div>`).join('')
+      : '<p class="care-empty">No pending reviews.</p>';
+  }
+}
+
+async function boot() {
+  const children = await api('/children').catch(() => []);
+  const sel = document.getElementById('caregiver-child-select');
+  sel.innerHTML = children.map(c =>
+    `<option value="${esc(c.child_id)}">${esc(c.name)} (${c.age})</option>`
+  ).join('');
+  if (children.length) {
+    sel.value = children[0].child_id;
+    loadDashboard(children[0].child_id);
+  }
+  sel.addEventListener('change', e => loadDashboard(e.target.value));
+  document.getElementById('refresh-btn').addEventListener('click', () => loadDashboard(sel.value));
+}
+
+boot();
+setInterval(() => {
+  const sel = document.getElementById('caregiver-child-select');
+  if (sel?.value) loadDashboard(sel.value);
+}, 30000); // auto-refresh every 30 s
+</script>
 </body>
 </html>

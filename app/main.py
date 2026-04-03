@@ -117,19 +117,42 @@ app.mount("/static", StaticFiles(directory=STATIC_DIR), name="static")
 
 
 @app.get("/", include_in_schema=False)
-def frontend_shell() -> FileResponse:
-    return FileResponse(STATIC_DIR / "index.html")
+def welcome_shell() -> FileResponse:
+    return FileResponse(STATIC_DIR / "welcome.html")
+
+
+@app.get("/session", include_in_schema=False)
+def session_shell() -> FileResponse:
+    """Child practice session UI — voice-first, tablet/TV optimised."""
+    return FileResponse(STATIC_DIR / "session.html")
 
 
 @app.get("/therapy", include_in_schema=False)
 def therapy_shell() -> FileResponse:
-    """Child therapy session UI — optimised for tablet and TV."""
+    """Parent / therapist monitoring dashboard."""
     return FileResponse(STATIC_DIR / "therapy.html")
 
 
+@app.get("/console", include_in_schema=False)
+def console_shell() -> FileResponse:
+    """Developer API console."""
+    return FileResponse(STATIC_DIR / "index.html")
+
+
 @app.get("/health")
-def health() -> dict[str, str]:
-    return {"status": "ok"}
+def health() -> dict:
+    from app.config import settings
+    return {
+        "status": "ok",
+        "version": app.version,
+        "env": settings.app_env,
+        "live_providers": settings.use_live_provider_calls,
+        "openai_configured": settings.configured(settings.openai_api_key),
+        "deepgram_configured": settings.configured(settings.deepgram_api_key),
+        "livekit_configured": settings.livekit_configured,
+        "supabase_enabled": settings.supabase_configured,
+        "auth_required": settings.configured(settings.clerk_secret_key),
+    }
 
 
 @app.get("/runtime/voice/tts/speak", include_in_schema=True)

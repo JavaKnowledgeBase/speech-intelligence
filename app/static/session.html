@@ -1,0 +1,121 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no, viewport-fit=cover" />
+  <meta name="apple-mobile-web-app-capable" content="yes" />
+  <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
+  <meta name="theme-color" content="#0d9488" />
+  <title>TalkBuddy — Let's Practice!</title>
+  <link rel="stylesheet" href="/static/therapy.css" />
+</head>
+<body>
+
+<div id="child-mode" class="mode-screen">
+  <div id="session-screen" class="session-screen">
+
+    <!-- Header -->
+    <header class="session-header" role="banner">
+      <div class="header-left">
+        <span class="child-name-badge" id="session-child-name" aria-live="polite">—</span>
+      </div>
+      <div class="header-center" aria-label="Reward stars">
+        <div class="stars-display" id="stars-display" role="img" aria-label="0 of 5 stars earned">
+          <span class="star" aria-hidden="true">☆</span>
+          <span class="star" aria-hidden="true">☆</span>
+          <span class="star" aria-hidden="true">☆</span>
+          <span class="star" aria-hidden="true">☆</span>
+          <span class="star" aria-hidden="true">☆</span>
+        </div>
+      </div>
+      <div class="header-right">
+        <span class="provider-badge mock" id="stt-badge" title="Speech-to-text">STT</span>
+        <span class="provider-badge mock" id="tts-badge" title="Text-to-speech">TTS</span>
+        <button class="icon-btn" id="end-session-btn" title="End session" aria-label="End session">
+          <span aria-hidden="true">✕</span>
+        </button>
+      </div>
+    </header>
+
+    <!-- Practice arena -->
+    <main class="practice-arena" role="main">
+
+      <div class="mascot-column">
+        <div class="mascot lips-mascot idle" id="mascot" role="img" aria-label="TalkBuddy mascot">
+          <svg viewBox="0 0 200 100" xmlns="http://www.w3.org/2000/svg">
+            <path class="lip-upper-sess"
+              d="M 20 50 C 50 20, 80 15, 100 22 C 120 15, 150 20, 180 50
+                 C 155 40, 130 36, 100 38 C 70 36, 45 40, 20 50 Z"
+              fill="#e05c7a" stroke="#c0445f" stroke-width="1.5"/>
+            <path d="M 70 28 Q 100 18 130 28" fill="none" stroke="#f08098" stroke-width="2" stroke-linecap="round"/>
+            <path class="lip-lower-sess"
+              d="M 20 50 C 45 60, 70 70, 100 72 C 130 70, 155 60, 180 50
+                 C 155 56, 130 62, 100 64 C 70 62, 45 56, 20 50 Z"
+              fill="#d44060" stroke="#b03050" stroke-width="1.5"/>
+            <ellipse cx="100" cy="62" rx="30" ry="5" fill="#e87090" opacity="0.4"/>
+          </svg>
+        </div>
+
+        <div class="mascot-bubble" id="mascot-bubble" hidden aria-live="polite" aria-atomic="true">
+          <p id="mascot-bubble-text"></p>
+        </div>
+
+        <p class="mascot-status" id="mascot-status" aria-live="polite">Getting ready…</p>
+      </div>
+
+      <div class="target-column">
+        <p class="prompt-label" id="prompt-label">Say this word:</p>
+
+        <div class="target-card" id="target-card" aria-label="Practice target">
+          <div class="target-icon" id="target-icon" aria-hidden="true">💬</div>
+          <div class="target-word" id="target-word" aria-live="polite">—</div>
+        </div>
+
+        <p class="target-cue" id="target-cue" aria-live="polite"></p>
+
+        <div class="mic-area" aria-label="Microphone status">
+          <div class="mic-ring idle" id="mic-ring" aria-hidden="true">
+            <span class="mic-icon">🎤</span>
+          </div>
+          <p class="mic-label" id="mic-label" aria-live="assertive">Waiting…</p>
+        </div>
+
+        <div class="interim-display" id="interim-display" aria-live="polite" aria-atomic="false"></div>
+      </div>
+    </main>
+
+    <!-- Celebration overlay -->
+    <div class="overlay" id="celebration-overlay" hidden role="alertdialog" aria-label="Great job!">
+      <div class="overlay-content">
+        <div class="overlay-emoji" id="celebration-emoji" aria-hidden="true">🌟</div>
+        <p class="overlay-title" id="celebration-title">Great job!</p>
+        <p class="overlay-sub" id="celebration-sub"></p>
+      </div>
+    </div>
+
+    <!-- Help overlay -->
+    <div class="overlay" id="help-overlay" hidden role="alertdialog" aria-label="Help needed">
+      <div class="overlay-content">
+        <div class="overlay-emoji" aria-hidden="true">🤝</div>
+        <p class="overlay-title">A grown-up will help now.</p>
+        <p class="overlay-sub" id="help-message"></p>
+        <button class="overlay-btn" id="dismiss-help-btn">OK</button>
+      </div>
+    </div>
+
+    <!-- Completed overlay -->
+    <div class="overlay" id="completed-overlay" hidden role="alertdialog" aria-label="Session complete">
+      <div class="overlay-content">
+        <div class="overlay-emoji" aria-hidden="true">🏆</div>
+        <p class="overlay-title">Session done!</p>
+        <p class="overlay-sub" id="completed-sub"></p>
+        <button class="overlay-btn" id="start-over-btn">Practice Again</button>
+      </div>
+    </div>
+
+  </div>
+</div>
+
+<script src="/static/session.js" defer></script>
+</body>
+</html>
