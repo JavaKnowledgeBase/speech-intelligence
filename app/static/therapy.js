@@ -72,6 +72,11 @@ const state = {
   recognitionActive: false,
   currentTarget: null,
   stars:         0,
+  wizard: {
+    firstName:     '',
+    lastName:      '',
+    caregiverName: '',
+  },
 };
 
 /* ─── DOM refs ───────────────────────────────────────────────────────────── */
@@ -116,6 +121,25 @@ const el = {
   completedOverlay:   document.getElementById('completed-overlay'),
   completedSub:       document.getElementById('completed-sub'),
   startOverBtn:       document.getElementById('start-over-btn'),
+
+  // Wizard
+  wizardCard:        document.getElementById('wizard-card'),
+  wizardMascot:      document.getElementById('wizard-mascot'),
+  wizardStepChild:   document.getElementById('wz-step-child'),
+  wizardStepCaregiver: document.getElementById('wz-step-caregiver'),
+  wizardStepLaunch:  document.getElementById('wz-step-launch'),
+  wizardPrompt:      document.getElementById('wizard-prompt'),
+  wizardNameDisplay: document.getElementById('wizard-name-display'),
+  wizardLetters:     document.getElementById('wizard-letters'),
+  wizardInterim:     document.getElementById('wizard-interim'),
+  wizardMicArea:     document.getElementById('wizard-mic-area'),
+  wizardMicRing:     document.getElementById('wizard-mic-ring'),
+  wizardMicLabel:    document.getElementById('wizard-mic-label'),
+  wizardConfirm:     document.getElementById('wizard-confirm'),
+  wizardYesBtn:      document.getElementById('wizard-yes-btn'),
+  wizardNoBtn:       document.getElementById('wizard-no-btn'),
+  wizardManual:      document.getElementById('wizard-manual'),
+  wizardSkipBtn:     document.getElementById('wizard-skip-btn'),
 
   // Caregiver mode
   caregiverMode:            document.getElementById('caregiver-mode'),
@@ -657,6 +681,266 @@ function updateTargetDisplay(word, cue) {
   el.targetCue.textContent = cue || '';
 }
 
+/* ─── Welcome Wizard ─────────────────────────────────────────────────────── */
+
+/**
+ * One-shot speech recognition for a single wizard step.
+ * Resolves with the transcript string (trimmed), or '' on silence/error.
+ */
+function wizardListen({ interimCb = null, timeout = 10000 } = {}) {
+  return new Promise((resolve) => {
+    const SR = window.SpeechRecognition || window.webkitSpeechRecognition;
+    if (!SR) { resolve(''); return; }
+
+    const rec = new SR();
+    rec.lang = 'en-US';
+    rec.continuous = false;
+    rec.interimResults = !!interimCb;
+
+    let settled = false;
+    const done = (val) => {
+      if (settled) return;
+      settled = true;
+      clearTimeout(timer);
+      try { rec.abort(); } catch { /* ignore */ }
+      resolve((val || '').trim());
+    };
+
+    const timer = setTimeout(() => done(''), timeout);
+
+    rec.onresult = (evt) => {
+      const results = Array.from(evt.results);
+      const text = results.map(r => r[0].transcript).join(' ');
+      if (interimCb) interimCb(text);
+      if (results[results.length - 1].isFinal) done(text);
+    };
+    rec.onerror = () => done('');
+    rec.onend   = () => done('');
+
+    try { rec.start(); } catch { done(''); }
+  });
+}
+
+function wSetMic(mode) {           // 'listening' | 'idle' | 'hidden'
+  if (mode === 'hidden') {
+    el.wizardMicArea.hidden = true;
+  } else {
+    el.wizardMicArea.hidden = false;
+    el.wizardMicRing.className = `mic-ring ${mode}`;
+    el.wizardMicLabel.textContent = mode === 'listening' ? 'Listening…' : 'Got it!';
+  }
+}
+
+function wShowLetters(text) {
+  el.wizardLetters.textContent = text.toUpperCase();
+  el.wizardNameDisplay.hidden = false;
+}
+
+function wHideLetters() {
+  el.wizardNameDisplay.hidden = true;
+  el.wizardInterim.textContent = '';
+}
+
+function wSetStep(step) {          // 'child' | 'caregiver' | 'launch'
+  [el.wizardStepChild, el.wizardStepCaregiver, el.wizardStepLaunch].forEach(s => s.classList.remove('active'));
+  if (step === 'child')     el.wizardStepChild.classList.add('active');
+  if (step === 'caregiver') el.wizardStepCaregiver.classList.add('active');
+  if (step === 'launch')    el.wizardStepLaunch.classList.add('active');
+}
+
+/** Yes/No tap — resolves true (yes) or false (no). */
+function wAskConfirm() {
+  return new Promise((resolve) => {
+    el.wizardConfirm.hidden = false;
+    const finish = (val) => {
+      el.wizardConfirm.hidden = true;
+      el.wizardYesBtn.removeEventListener('click', onYes);
+      el.wizardNoBtn.removeEventListener('click', onNo);
+      resolve(val);
+    };
+    const onYes = () => finish(true);
+    const onNo  = () => finish(false);
+    el.wizardYesBtn.addEventListener('click', onYes);
+    el.wizardNoBtn.addEventListener('click', onNo);
+  });
+}
+
+/**
+ * Convert a spelled-out response ("L I A M", "el eye ay em") into letters.
+ */
+function parseSpelling(heard) {
+  const map = {
+    'ay':'A','bee':'B','see':'C','dee':'D','ee':'E','ef':'F','eff':'F',
+    'gee':'G','aitch':'H','eye':'I','jay':'J','kay':'K','el':'L','ell':'L',
+    'em':'M','en':'N','oh':'O','pee':'P','cue':'Q','are':'R','ar':'R',
+    'ess':'S','tee':'T','you':'U','vee':'V','double you':'W','ex':'X',
+    'why':'Y','zee':'Z','zed':'Z',
+  };
+  const tokens = heard.toLowerCase().split(/[\s\-,\.]+/).filter(Boolean);
+  const letters = tokens.map(t =>
+    t.length === 1 && /[a-z]/.test(t) ? t.toUpperCase() : (map[t] || '')
+  );
+  const result = letters.join('');
+  return result || heard.replace(/\s+/g, '').toUpperCase();
+}
+
+/** Capitalise first letter of each word. */
+function toTitleCase(s) {
+  return s.replace(/\w\S*/g, w => w.charAt(0).toUpperCase() + w.slice(1).toLowerCase());
+}
+
+/**
+ * Full ask-spell-confirm loop for one name part (first or last).
+ * Returns the confirmed spelled name (uppercase letters string).
+ */
+async function wCollectName(askMsg, nameLabel) {
+  while (true) {
+    // ── Ask for name by voice ──────────────────────────────────────────────
+    el.wizardPrompt.textContent = askMsg;
+    wHideLetters();
+    wSetMic('hidden');
+    await speak(askMsg);
+
+    wSetMic('listening');
+    el.wizardInterim.textContent = '';
+    const heardName = await wizardListen({
+      interimCb: t => { el.wizardInterim.textContent = t; },
+      timeout: 9000,
+    });
+    wSetMic('idle');
+    const displayName = toTitleCase(heardName || nameLabel);
+
+    // ── Ask to spell ───────────────────────────────────────────────────────
+    const spellMsg = `Can you please spell ${nameLabel === 'first name' ? 'the first name' : 'the last name'}?`;
+    el.wizardPrompt.textContent = spellMsg;
+    wHideLetters();
+    await speak(spellMsg);
+
+    wSetMic('listening');
+    el.wizardInterim.textContent = '';
+    const heardSpelling = await wizardListen({
+      interimCb: t => { el.wizardInterim.textContent = t; },
+      timeout: 12000,
+    });
+    wSetMic('idle');
+
+    const spelled = parseSpelling(heardSpelling || displayName);
+
+    // ── Display letters and confirm ────────────────────────────────────────
+    wShowLetters(spelled.split('').join('  '));
+    const letterRead = spelled.split('').join(', ');
+    const confirmMsg = `Please correct me if I'm wrong. Is the ${nameLabel} ${letterRead}?`;
+    el.wizardPrompt.textContent = `Is this right?`;
+    await speak(confirmMsg);
+
+    const yes = await wAskConfirm();
+    if (yes) return spelled;
+
+    // ── Listen for correction ──────────────────────────────────────────────
+    const correctMsg = 'Okay. Please say the correct spelling.';
+    el.wizardPrompt.textContent = correctMsg;
+    wHideLetters();
+    await speak(correctMsg);
+
+    wSetMic('listening');
+    el.wizardInterim.textContent = '';
+    const correction = await wizardListen({
+      interimCb: t => { el.wizardInterim.textContent = t; },
+      timeout: 12000,
+    });
+    wSetMic('idle');
+
+    if (correction) {
+      const corrected = parseSpelling(correction);
+      wShowLetters(corrected.split('').join('  '));
+      const reconfirm = `Is the ${nameLabel} now ${corrected.split('').join(', ')}?`;
+      el.wizardPrompt.textContent = 'Is this right now?';
+      await speak(reconfirm);
+      const ok = await wAskConfirm();
+      if (ok) return corrected;
+    }
+    // Loop again if still wrong
+  }
+}
+
+/** Collect a plain spoken name — no spelling step (used for caregiver). */
+async function wCollectSimpleName(msg) {
+  el.wizardPrompt.textContent = msg;
+  wHideLetters();
+  wSetMic('hidden');
+  await speak(msg);
+  wSetMic('listening');
+  el.wizardInterim.textContent = '';
+  const heard = await wizardListen({
+    interimCb: t => { el.wizardInterim.textContent = t; },
+    timeout: 9000,
+  });
+  wSetMic('idle');
+  return (heard || '').trim();
+}
+
+/** Find the best matching child from backend data. */
+function matchChild(firstName, lastName) {
+  if (!state.children.length) return null;
+  const fn = firstName.toLowerCase();
+  const ln = lastName.toLowerCase();
+  return (
+    state.children.find(c => {
+      const parts = c.name.toLowerCase().split(/\s+/);
+      return parts[0] === fn && (!ln || parts[1] === ln);
+    }) ||
+    state.children.find(c => c.name.toLowerCase().startsWith(fn)) ||
+    state.children[0]
+  );
+}
+
+async function runWizard() {
+  // Reveal skip button after 2 s so parents can see the wizard first
+  setTimeout(() => { el.wizardSkipBtn.style.opacity = '1'; }, 2000);
+
+  wSetStep('child');
+  wHideLetters();
+  wSetMic('hidden');
+  el.wizardConfirm.hidden = true;
+  el.wizardMascot.className = 'mascot idle';
+
+  // Step 1 — Welcome
+  const welcome = 'Welcome to TalkBuddy!';
+  el.wizardPrompt.textContent = welcome;
+  await speak(welcome);
+
+  // Step 2–4 — Child first name (with spelling + confirm)
+  const firstName = await wCollectName("Please say the child's first name.", 'first name');
+
+  // Step 5–9 repeated for last name
+  const lastName = await wCollectName("Now please say the child's last name.", 'last name');
+
+  // Caregiver name (simple, no spelling)
+  wSetStep('caregiver');
+  const caregiverName = await wCollectSimpleName('And your name? Please say the caregiver or parent name.');
+
+  state.wizard.firstName     = firstName;
+  state.wizard.lastName      = lastName;
+  state.wizard.caregiverName = caregiverName;
+
+  // Launch
+  wSetStep('launch');
+  const launchMsg = "Great! Let's start playing!";
+  el.wizardPrompt.textContent = launchMsg;
+  wHideLetters();
+  wSetMic('hidden');
+  await speak(launchMsg);
+
+  // Match child and kick off session
+  const matched = matchChild(firstName, lastName);
+  if (matched) {
+    el.childSelect.value = matched.child_id;
+  } else if (state.children.length) {
+    el.childSelect.value = state.children[0].child_id;
+  }
+  await startSession();
+}
+
 /* ─── Start session ──────────────────────────────────────────────────────── */
 async function startSession() {
   const childId = el.childSelect.value;
@@ -906,6 +1190,12 @@ async function init() {
   // Detect providers asynchronously (don't block UI)
   detectProviders();
 
+  // Kick off the voice welcome wizard automatically
+  runWizard().catch(() => {
+    // Wizard failed (e.g. no mic) — show manual fallback
+    showWizardManualFallback();
+  });
+
   // Warm up speech synthesis voices list
   if ('speechSynthesis' in window) {
     window.speechSynthesis.getVoices();
@@ -916,6 +1206,21 @@ async function init() {
 }
 
 /* ─── Event listeners ────────────────────────────────────────────────────── */
+
+function showWizardManualFallback() {
+  // Stop any running speech
+  if ('speechSynthesis' in window) window.speechSynthesis.cancel();
+  el.wizardCard.querySelector('.wizard-steps').hidden   = true;
+  el.wizardMicArea.hidden   = true;
+  el.wizardConfirm.hidden   = true;
+  el.wizardNameDisplay.hidden = true;
+  el.wizardInterim.textContent = '';
+  el.wizardPrompt.textContent = "Who's practicing today?";
+  el.wizardManual.hidden = false;
+  el.wizardSkipBtn.style.display = 'none';
+}
+
+el.wizardSkipBtn.addEventListener('click', showWizardManualFallback);
 
 el.beginSessionBtn.addEventListener('click', () => startSession());
 

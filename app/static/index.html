@@ -8,155 +8,208 @@
 </head>
 <body>
   <div class="page-shell">
+
+    <!-- ── Compact header ─────────────────────────────────────────────────── -->
     <header class="hero">
-      <div>
+      <div class="hero-text">
         <p class="eyebrow">Voice-First Session Console</p>
-        <h1>TalkBuddy keeps the child in a calm speaking loop.</h1>
+        <h1>TalkBuddy</h1>
         <p class="hero-copy">
-          This shell is optimized around microphone readiness, speaker readiness, transcript-backed recovery,
-          and the live session state we already expose in the backend.
+          Microphone readiness · transcript-backed recovery · live session state
         </p>
       </div>
       <div class="hero-card status-cluster" id="provider-statuses">
-        <h2>Provider Readiness</h2>
-        <p class="support-copy">Loading provider state from the API.</p>
+        <p class="eyebrow">Provider Readiness</p>
+        <p class="support-copy">Loading provider state from the API…</p>
       </div>
     </header>
 
-    <main class="console-grid">
-      <section class="panel session-panel">
-        <div class="panel-heading">
-          <div>
-            <p class="eyebrow">Session</p>
-            <h2>Child Practice Loop</h2>
+    <!-- ── Tab bar ────────────────────────────────────────────────────────── -->
+    <nav class="tab-bar" role="tablist" aria-label="Console panels">
+      <button class="tab-btn active" role="tab" aria-selected="true"
+              aria-controls="tab-session" data-tab="session">
+        <span class="tab-icon">📋</span> Session
+      </button>
+      <button class="tab-btn" role="tab" aria-selected="false"
+              aria-controls="tab-audio" data-tab="audio">
+        <span class="tab-icon">🎤</span> Audio Runtime
+      </button>
+      <button class="tab-btn" role="tab" aria-selected="false"
+              aria-controls="tab-transcript" data-tab="transcript">
+        <span class="tab-icon">📝</span> Transcript
+      </button>
+      <button class="tab-btn" role="tab" aria-selected="false"
+              aria-controls="tab-log" data-tab="log">
+        <span class="tab-icon">📊</span> Runtime Log
+      </button>
+    </nav>
+
+    <!-- ── Tab content area ───────────────────────────────────────────────── -->
+    <div class="tab-content-area">
+
+      <!-- ── SESSION ────────────────────────────────────────────────────── -->
+      <div class="tab-panel active" id="tab-session" role="tabpanel">
+        <div class="panel">
+          <div class="panel-heading">
+            <div>
+              <p class="eyebrow">Session</p>
+              <h2>Child Practice Loop</h2>
+            </div>
+            <span class="status-pill" id="session-status">Idle</span>
           </div>
-          <span class="status-pill" id="session-status">Idle</span>
-        </div>
 
-        <label class="field">
-          <span>Child</span>
-          <select id="child-select"></select>
-        </label>
+          <label class="field">
+            <span>Child</span>
+            <select id="child-select"></select>
+          </label>
 
-        <div class="button-row">
-          <button class="primary-button" id="start-session">Start Session</button>
-          <button class="secondary-button" id="complete-session" disabled>Complete Session</button>
-        </div>
-
-        <div class="session-summary" id="session-summary">
-          <div>
-            <span class="summary-label">Current target</span>
-            <strong id="target-text">Waiting to start</strong>
+          <div class="button-row">
+            <button class="primary-button" id="start-session">Start Session</button>
+            <button class="secondary-button" id="complete-session" disabled>Complete Session</button>
           </div>
-          <div>
-            <span class="summary-label">Cue</span>
-            <strong id="target-cue">The backend will assign one when the session opens.</strong>
+
+          <div class="session-summary" id="session-summary">
+            <div>
+              <span class="summary-label">Current target</span>
+              <strong id="target-text">Waiting to start</strong>
+            </div>
+            <div>
+              <span class="summary-label">Cue</span>
+              <strong id="target-cue">The backend will assign one when the session opens.</strong>
+            </div>
           </div>
-        </div>
 
-        <article class="voice-card coach-card">
-          <p class="card-label">Coach output</p>
-          <p id="coach-message">Start a session to load the child-safe voice prompt.</p>
-        </article>
-
-        <article class="voice-card parent-card" id="parent-card" hidden>
-          <p class="card-label">Caregiver note</p>
-          <p id="parent-message"></p>
-        </article>
-      </section>
-
-      <section class="panel audio-panel">
-        <div class="panel-heading">
-          <div>
-            <p class="eyebrow">Audio Runtime</p>
-            <h2>Mic and Speaker State</h2>
-          </div>
-          <span class="status-pill accent-pill" id="mic-status">Mic locked</span>
-        </div>
-
-        <div class="button-row">
-          <button class="primary-button" id="enable-mic">Enable Microphone</button>
-          <button class="secondary-button" id="connect-transport">Connect Transport</button>
-          <button class="secondary-button" id="speaker-ready">Speaker Ready</button>
-        </div>
-
-        <div class="meter-wrap">
-          <div class="meter-bar"><span id="meter-fill"></span></div>
-          <p class="support-copy" id="meter-caption">Waiting for microphone permission.</p>
-        </div>
-
-        <div class="runtime-grid">
-          <article class="runtime-card">
-            <p class="card-label">Runtime room</p>
-            <strong id="runtime-room">Waiting for session</strong>
-            <span id="runtime-token-state">Token state will appear after runtime negotiation.</span>
-            <span id="runtime-transport">Transport profile will appear here.</span>
-            <span id="runtime-connection-state">Connection state will appear after join handshake.</span>
+          <article class="voice-card coach-card">
+            <p class="card-label">Coach output</p>
+            <p id="coach-message">Start a session to load the child-safe voice prompt.</p>
           </article>
-          <article class="runtime-card">
-            <p class="card-label">STT lane</p>
-            <strong id="runtime-stt-lane">Live mic now</strong>
-            <span id="runtime-transcript-lane">Streaming STT wiring comes next.</span>
-          </article>
-          <article class="runtime-card">
-            <p class="card-label">TTS lane</p>
-            <strong id="runtime-tts-lane">Dedicated TTS pending</strong>
-            <span id="speaker-status">This shell keeps a speaker-ready lane for the upcoming TTS handoff.</span>
-            <span id="playback-state">No queued playback yet.</span>
+
+          <article class="voice-card parent-card" id="parent-card" hidden>
+            <p class="card-label">Caregiver note</p>
+            <p id="parent-message"></p>
           </article>
         </div>
-      </section>
+      </div>
 
-      <section class="panel transcript-panel">
-        <div class="panel-heading">
-          <div>
-            <p class="eyebrow">Transcript Fallback</p>
-            <h2>Operator Debug Turn</h2>
+      <!-- ── AUDIO RUNTIME ──────────────────────────────────────────────── -->
+      <div class="tab-panel" id="tab-audio" role="tabpanel">
+        <div class="panel">
+          <div class="panel-heading">
+            <div>
+              <p class="eyebrow">Audio Runtime</p>
+              <h2>Mic and Speaker State</h2>
+            </div>
+            <span class="status-pill accent-pill" id="mic-status">Mic locked</span>
           </div>
-          <span class="status-pill soft-pill">Fallback</span>
-        </div>
 
-        <p class="support-copy">
-          Until LiveKit, Deepgram, and TTS are wired, we keep a transcript-backed fallback so the therapy loop,
-          state transitions, and filtered responses remain testable.
-        </p>
-
-        <label class="field">
-          <span>Recognized transcript</span>
-          <textarea id="transcript-input" rows="4" placeholder="Type the recognized child attempt here."></textarea>
-        </label>
-
-        <label class="field">
-          <span>Attention score</span>
-          <input id="attention-score" type="range" min="0" max="1" step="0.05" value="0.8" />
-          <strong id="attention-value">0.80</strong>
-        </label>
-
-        <button class="primary-button" id="send-turn" disabled>Send Turn</button>
-
-        <article class="voice-card feedback-card">
-          <p class="card-label">Latest feedback</p>
-          <p id="turn-feedback">The next feedback message will appear here.</p>
-        </article>
-      </section>
-
-      <section class="panel log-panel">
-        <article class="voice-card feedback-card">
-          <p class="card-label">Latency Summary</p>
-          <p id="latency-summary">Voice checkpoints will appear here once the session loop starts.</p>
-        </article>
-        <div class="panel-heading">
-          <div>
-            <p class="eyebrow">Runtime Log</p>
-            <h2>Transcript and Event Trail</h2>
+          <div class="button-row">
+            <button class="primary-button" id="enable-mic">Enable Microphone</button>
+            <button class="secondary-button" id="connect-transport">Connect Transport</button>
+            <button class="secondary-button" id="speaker-ready">Speaker Ready</button>
           </div>
-          <span class="status-pill soft-pill">Audit</span>
-        </div>
-        <ol id="event-log" class="event-log"></ol>
-      </section>
-    </main>
-  </div>
 
+          <div class="meter-wrap">
+            <div class="meter-bar"><span id="meter-fill"></span></div>
+            <p class="support-copy" id="meter-caption">Waiting for microphone permission.</p>
+          </div>
+
+          <div class="runtime-grid">
+            <article class="runtime-card">
+              <p class="card-label">Runtime room</p>
+              <strong id="runtime-room">Waiting for session</strong>
+              <span id="runtime-token-state">Token state will appear after runtime negotiation.</span>
+              <span id="runtime-transport">Transport profile will appear here.</span>
+              <span id="runtime-connection-state">Connection state will appear after join handshake.</span>
+            </article>
+            <article class="runtime-card">
+              <p class="card-label">STT lane</p>
+              <strong id="runtime-stt-lane">Live mic now</strong>
+              <span id="runtime-transcript-lane">Streaming STT wiring comes next.</span>
+            </article>
+            <article class="runtime-card">
+              <p class="card-label">TTS lane</p>
+              <strong id="runtime-tts-lane">Dedicated TTS pending</strong>
+              <span id="speaker-status">This shell keeps a speaker-ready lane for the upcoming TTS handoff.</span>
+              <span id="playback-state">No queued playback yet.</span>
+            </article>
+          </div>
+        </div>
+      </div>
+
+      <!-- ── TRANSCRIPT FALLBACK ────────────────────────────────────────── -->
+      <div class="tab-panel" id="tab-transcript" role="tabpanel">
+        <div class="panel">
+          <div class="panel-heading">
+            <div>
+              <p class="eyebrow">Transcript Fallback</p>
+              <h2>Operator Debug Turn</h2>
+            </div>
+            <span class="status-pill soft-pill">Fallback</span>
+          </div>
+
+          <p class="support-copy">
+            Until LiveKit, Deepgram, and TTS are wired, this transcript-backed fallback keeps the
+            therapy loop, state transitions, and filtered responses testable without live audio.
+          </p>
+
+          <label class="field">
+            <span>Recognized transcript</span>
+            <textarea id="transcript-input" rows="5"
+              placeholder="Type the recognized child attempt here (e.g. ba, ma, pa)."></textarea>
+          </label>
+
+          <label class="field">
+            <span>Attention score — <strong id="attention-value">0.80</strong></span>
+            <input id="attention-score" type="range" min="0" max="1" step="0.05" value="0.8" />
+          </label>
+
+          <button class="primary-button" id="send-turn" disabled>Send Turn</button>
+
+          <article class="voice-card feedback-card" style="margin-top: 20px;">
+            <p class="card-label">Latest feedback</p>
+            <p id="turn-feedback">The next feedback message will appear here.</p>
+          </article>
+        </div>
+      </div>
+
+      <!-- ── RUNTIME LOG ─────────────────────────────────────────────────── -->
+      <div class="tab-panel" id="tab-log" role="tabpanel">
+        <div class="panel">
+          <div class="panel-heading">
+            <div>
+              <p class="eyebrow">Runtime Log</p>
+              <h2>Transcript and Event Trail</h2>
+            </div>
+            <span class="status-pill soft-pill">Audit</span>
+          </div>
+
+          <article class="voice-card feedback-card">
+            <p class="card-label">Latency Summary</p>
+            <p id="latency-summary">Voice checkpoints will appear here once the session loop starts.</p>
+          </article>
+
+          <ol id="event-log" class="event-log"></ol>
+        </div>
+      </div>
+
+    </div><!-- /tab-content-area -->
+  </div><!-- /page-shell -->
+
+  <script>
+    // Tab switching — runs before app.js to be safe
+    document.querySelectorAll('.tab-btn').forEach(btn => {
+      btn.addEventListener('click', () => {
+        const tab = btn.dataset.tab;
+        document.querySelectorAll('.tab-btn').forEach(b => {
+          b.classList.toggle('active', b === btn);
+          b.setAttribute('aria-selected', b === btn ? 'true' : 'false');
+        });
+        document.querySelectorAll('.tab-panel').forEach(p => {
+          p.classList.toggle('active', p.id === `tab-${tab}`);
+        });
+      });
+    });
+  </script>
   <script src="/static/app.js" defer></script>
 </body>
 </html>

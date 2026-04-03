@@ -193,6 +193,159 @@ button, select, input { font: inherit; }
 }
 
 /* ══════════════════════════════════════════════════════════════════════════
+   WELCOME WIZARD
+══════════════════════════════════════════════════════════════════════════ */
+.wizard-card {
+  background: var(--surface);
+  border-radius: 40px;
+  padding: var(--sp-lg) var(--sp-xl);
+  box-shadow: var(--shadow);
+  max-width: 680px;
+  width: 100%;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: var(--sp-md);
+  max-height: 92vh;
+  overflow-y: auto;
+  scrollbar-width: none;
+}
+
+.wizard-card::-webkit-scrollbar { display: none; }
+
+.wizard-mascot {
+  font-size: clamp(5rem, 12vw, 9rem);
+  line-height: 1;
+  animation: mascot-idle 4s ease-in-out infinite;
+}
+
+/* Step pills */
+.wizard-steps {
+  display: flex;
+  gap: var(--sp-sm);
+  flex-wrap: wrap;
+  justify-content: center;
+}
+
+.wz-step {
+  font-size: var(--sz-xs);
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  padding: 6px 18px;
+  border-radius: 999px;
+  background: var(--border);
+  color: var(--muted);
+  transition: background 300ms, color 300ms;
+}
+
+.wz-step.active {
+  background: var(--brand);
+  color: #fff;
+}
+
+/* Main prompt line */
+.wizard-prompt {
+  font-size: clamp(var(--sz-base), 3.5vw, var(--sz-xl));
+  font-weight: 700;
+  color: var(--ink);
+  text-align: center;
+  line-height: 1.3;
+  max-width: 520px;
+}
+
+/* Large letter display */
+.wizard-name-display {
+  background: var(--brand-light);
+  border: 3px solid var(--brand);
+  border-radius: 28px;
+  padding: var(--sp-md) var(--sp-xl);
+  width: 100%;
+  text-align: center;
+}
+
+.wizard-letters {
+  font-size: clamp(3rem, 10vw, 7rem);
+  font-weight: 900;
+  color: var(--brand-dark);
+  letter-spacing: 0.12em;
+  line-height: 1;
+  word-break: break-all;
+}
+
+/* Interim heard text */
+.wizard-interim {
+  font-size: var(--sz-base);
+  color: var(--brand-dark);
+  font-style: italic;
+  min-height: 1.6em;
+  text-align: center;
+  background: rgba(255,255,255,0.7);
+  padding: 6px 20px;
+  border-radius: 12px;
+  border: 1px solid var(--border);
+  width: 100%;
+  max-width: 440px;
+}
+
+/* Wizard mic sits below the interim */
+.wizard-mic-area {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: var(--sp-sm);
+}
+
+/* Yes / No buttons */
+.wizard-confirm {
+  display: flex;
+  gap: var(--sp-md);
+  flex-wrap: wrap;
+  justify-content: center;
+  width: 100%;
+}
+
+.wizard-yes-btn {
+  background: linear-gradient(135deg, var(--success), #166534);
+  color: #fff;
+  min-height: var(--tap);
+  padding: 0 var(--sp-xl);
+  font-size: var(--sz-lg);
+  box-shadow: 0 8px 24px rgba(21, 128, 61, 0.30);
+  flex: 1;
+  max-width: 280px;
+}
+
+.wizard-no-btn {
+  background: linear-gradient(135deg, var(--escalate), #991b1b);
+  color: #fff;
+  min-height: var(--tap);
+  padding: 0 var(--sp-xl);
+  font-size: var(--sz-lg);
+  box-shadow: 0 8px 24px rgba(185, 28, 28, 0.28);
+  flex: 1;
+  max-width: 280px;
+}
+
+/* Manual fallback section */
+.wizard-manual {
+  width: 100%;
+  display: flex;
+  flex-direction: column;
+  gap: var(--sp-md);
+  align-items: center;
+}
+
+/* Wizard footer links */
+.wizard-footer {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 4px;
+  margin-top: var(--sp-xs);
+}
+
+/* ══════════════════════════════════════════════════════════════════════════
    CHILD MODE — SESSION SCREEN
 ══════════════════════════════════════════════════════════════════════════ */
 .session-screen {

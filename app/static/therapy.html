@@ -21,27 +21,72 @@
 ══════════════════════════════════════════════════════════════════════ -->
 <div id="child-mode" class="mode-screen">
 
-  <!-- ── Setup screen (no active session) ── -->
+  <!-- ── Setup screen: voice wizard ── -->
   <div id="setup-screen" class="setup-screen">
-    <div class="setup-card">
-      <div class="mascot-hero" aria-hidden="true">🦊</div>
-      <h1 class="brand-title">TalkBuddy</h1>
-      <p class="brand-sub">Ready for speech practice?</p>
+    <div class="wizard-card" id="wizard-card">
 
-      <label class="setup-field">
-        <span>Who's practicing today?</span>
-        <select id="child-select" class="child-select" aria-label="Select child">
-          <option value="">Loading children…</option>
-        </select>
-      </label>
+      <!-- Mascot -->
+      <div class="mascot wizard-mascot" id="wizard-mascot" aria-hidden="true">🦊</div>
 
-      <button id="begin-session-btn" class="big-btn begin-btn" disabled>
-        <span aria-hidden="true">▶</span> Start Practice
-      </button>
+      <!-- Step progress pills -->
+      <div class="wizard-steps" aria-label="Setup progress">
+        <span class="wz-step active" id="wz-step-child">Child Name</span>
+        <span class="wz-step" id="wz-step-caregiver">Caregiver</span>
+        <span class="wz-step" id="wz-step-launch">Let's Go!</span>
+      </div>
 
-      <button id="switch-to-caregiver-btn" class="link-btn">
-        Caregiver / Clinician View
-      </button>
+      <!-- Spoken prompt shown as text -->
+      <p class="wizard-prompt" id="wizard-prompt" aria-live="polite">Welcome to TalkBuddy!</p>
+
+      <!-- Large letter / name display -->
+      <div class="wizard-name-display" id="wizard-name-display" hidden aria-live="polite">
+        <div class="wizard-letters" id="wizard-letters"></div>
+      </div>
+
+      <!-- Interim transcript while listening -->
+      <div class="wizard-interim" id="wizard-interim" aria-live="polite" aria-atomic="true"></div>
+
+      <!-- Mic ring -->
+      <div class="wizard-mic-area" id="wizard-mic-area" hidden>
+        <div class="mic-ring idle" id="wizard-mic-ring" aria-hidden="true">
+          <span class="mic-icon">🎤</span>
+        </div>
+        <p class="mic-label" id="wizard-mic-label">Listening…</p>
+      </div>
+
+      <!-- Yes / No confirmation buttons -->
+      <div class="wizard-confirm" id="wizard-confirm" hidden role="group" aria-label="Confirm name">
+        <button class="big-btn wizard-yes-btn" id="wizard-yes-btn" aria-label="Yes, that is correct">
+          ✓ Yes, correct!
+        </button>
+        <button class="big-btn wizard-no-btn" id="wizard-no-btn" aria-label="No, try again">
+          ✗ No, try again
+        </button>
+      </div>
+
+      <!-- Manual fallback (hidden until skip) -->
+      <div id="wizard-manual" class="wizard-manual" hidden>
+        <label class="setup-field">
+          <span>Who's practicing today?</span>
+          <select id="child-select" class="child-select" aria-label="Select child">
+            <option value="">Loading…</option>
+          </select>
+        </label>
+        <button id="begin-session-btn" class="big-btn begin-btn" disabled>
+          <span aria-hidden="true">▶</span> Start Practice
+        </button>
+      </div>
+
+      <!-- Bottom links -->
+      <div class="wizard-footer">
+        <button class="link-btn" id="wizard-skip-btn" style="opacity:0;transition:opacity 0.5s">
+          Skip — choose manually
+        </button>
+        <button class="link-btn" id="switch-to-caregiver-btn">
+          Caregiver / Clinician View
+        </button>
+      </div>
+
     </div>
   </div>
 
