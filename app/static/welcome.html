@@ -2,586 +2,542 @@
 <html lang="en">
 <head>
   <meta charset="UTF-8" />
-  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>TalkBuddy Welcome Session</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no, viewport-fit=cover" />
+  <meta name="apple-mobile-web-app-capable" content="yes" />
+  <meta name="theme-color" content="#0f766e" />
+  <title>TalkBuddy — Welcome</title>
   <style>
     :root {
-      --bg: #f6efe2;
-      --ink: #2f241d;
-      --muted: #6e655b;
-      --teal: #0f766e;
+      --teal:      #0f766e;
       --teal-dark: #115e59;
-      --card: rgba(255, 251, 245, 0.88);
-      --line: rgba(47, 36, 29, 0.08);
-      --shadow: 0 24px 60px rgba(45, 35, 25, 0.12);
-      --accent: #c65a73;
-      --mouth: #86283d;
+      --teal-lt:   #ccfbf1;
+      --ink:       #1e293b;
+      --muted:     #64748b;
+      --bg:        #f0faf8;
+      --surface:   #ffffff;
+      --shadow:    0 20px 60px rgba(15,118,110,0.14);
+      --green:     #15803d;
+      --amber:     #b45309;
     }
-
-    * { box-sizing: border-box; }
-
-    body {
-      margin: 0;
-      min-height: 100vh;
-      display: grid;
-      place-items: center;
-      background:
-        radial-gradient(circle at top, rgba(15, 118, 110, 0.14), transparent 30%),
-        linear-gradient(180deg, #fbf6ee 0%, var(--bg) 58%, #eee2d0 100%);
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+    html, body {
+      height: 100%; overflow: hidden;
+      font-family: "Avenir Next", "Trebuchet MS", system-ui, sans-serif;
+      background: linear-gradient(140deg, #e0f7f5 0%, var(--bg) 60%, #fef9f0 100%);
       color: var(--ink);
-      font-family: Georgia, "Times New Roman", serif;
+      -webkit-tap-highlight-color: transparent;
+      user-select: none;
     }
-
-    .shell {
-      width: min(100%, 760px);
-      margin: 0 auto;
-      padding: 28px 18px 38px;
+    /* ── layout ── */
+    .page {
+      height: 100%; display: flex; align-items: center; justify-content: center;
+      padding: 20px;
     }
-
-    .stage {
-      background: var(--card);
-      border: 1px solid var(--line);
-      border-radius: 32px;
-      box-shadow: var(--shadow);
-      padding: 34px 24px 30px;
-      text-align: center;
-      backdrop-filter: blur(10px);
+    .card {
+      background: var(--surface); border-radius: 40px;
+      box-shadow: var(--shadow); padding: 36px 32px;
+      max-width: 640px; width: 100%;
+      display: flex; flex-direction: column; align-items: center;
+      gap: 20px; max-height: 96vh; overflow-y: auto; scrollbar-width: none;
+      cursor: pointer;
+      animation: card-glow 2.4s ease-in-out infinite;
     }
-
-    h1 {
-      margin: 0;
-      font-size: clamp(3.2rem, 9vw, 5.8rem);
-      line-height: 0.9;
-      letter-spacing: -0.05em;
+    .card.active { cursor: default; animation: none; }
+    .card::-webkit-scrollbar { display: none; }
+    @keyframes card-glow {
+      0%,100% { box-shadow: var(--shadow); }
+      50%      { box-shadow: 0 8px 60px rgba(15,118,110,0.30), var(--shadow); }
     }
-
-    .avatar-wrap {
-      position: relative;
-      width: min(100%, 280px);
-      margin: 18px auto 8px;
-      padding-top: 8px;
+    /* ── lips SVG ── */
+    .lips-wrap {
+      width: clamp(180px, 36vw, 280px);
+      filter: drop-shadow(0 6px 18px rgba(208,64,96,0.25));
     }
-
-    .avatar-orb {
-      position: absolute;
-      inset: 20px 28px auto 28px;
-      height: 180px;
-      border-radius: 50%;
-      background: radial-gradient(circle, rgba(15,118,110,0.22), rgba(15,118,110,0.03) 68%, transparent 72%);
-      filter: blur(5px);
-      animation: glowFloat 4.8s ease-in-out infinite;
+    .lips-wrap svg { width: 100%; height: auto; display: block; }
+    .lips-wrap.idle   svg { animation: lips-breathe 3.5s ease-in-out infinite; }
+    .lips-wrap.speak  svg { animation: lips-speak  0.30s ease-in-out infinite alternate; }
+    .lips-wrap.listen svg { animation: lips-listen  1.2s ease-in-out infinite; }
+    @keyframes lips-breathe {
+      0%,100% { transform: scaleY(1) translateY(0); }
+      50%      { transform: scaleY(1.05) translateY(-4px); }
     }
-
-    .avatar {
-      position: relative;
-      width: 100%;
-      height: auto;
-      z-index: 1;
-      filter: drop-shadow(0 16px 24px rgba(36, 28, 18, 0.12));
+    @keyframes lips-speak {
+      from { transform: scaleY(0.85); }
+      to   { transform: scaleY(1.18); }
     }
-
-    .speaker.is-speaking .avatar {
-      animation: bobTalk 0.85s ease-in-out infinite;
+    @keyframes lips-listen {
+      0%,100% { transform: scale(1); }
+      50%      { transform: scale(1.07); }
     }
-
-    .speaker.is-speaking .avatar-orb {
-      animation: glowPulse 1s ease-in-out infinite;
+    /* ── step pills ── */
+    .steps { display: flex; gap: 10px; flex-wrap: wrap; justify-content: center; }
+    .step {
+      font-size: 0.72rem; font-weight: 700; letter-spacing: 0.1em;
+      text-transform: uppercase; padding: 5px 16px; border-radius: 999px;
+      background: #e2e8f0; color: var(--muted); transition: background 300ms, color 300ms;
     }
-
-    .speaker.is-speaking .mouth-open {
-      opacity: 1;
-      animation: mouthOpen 0.22s ease-in-out infinite alternate;
-      transform-origin: center;
+    .step.active { background: var(--teal); color: #fff; }
+    /* ── prompt ── */
+    .prompt {
+      font-size: clamp(1.1rem, 3.5vw, 1.7rem); font-weight: 700;
+      color: var(--ink); text-align: center; line-height: 1.35; max-width: 500px;
     }
-
-    .speaker.is-speaking .mouth-lips {
-      animation: lipMove 0.22s ease-in-out infinite alternate;
-      transform-origin: center;
+    /* ── spelled name display ── */
+    .name-display {
+      background: var(--teal-lt); border: 3px solid var(--teal);
+      border-radius: 24px; padding: 16px 28px; width: 100%; text-align: center;
     }
-
-    .status {
-      min-height: 28px;
-      margin: 8px auto 0;
-      font-size: 0.98rem;
-      color: var(--muted);
-      line-height: 1.5;
-      max-width: 520px;
+    .name-letters {
+      font-size: clamp(2.5rem, 9vw, 5.5rem); font-weight: 900;
+      color: var(--teal-dark); letter-spacing: 0.14em; word-break: break-all;
     }
-
-    .confirmations {
-      margin: 26px auto 0;
-      width: min(100%, 520px);
-      display: grid;
-      gap: 12px;
+    /* ── interim heard text ── */
+    .interim {
+      font-size: 1rem; color: var(--teal-dark); font-style: italic;
+      min-height: 1.5em; text-align: center; width: 100%; max-width: 440px;
+      background: rgba(255,255,255,0.7); padding: 6px 18px; border-radius: 12px;
+      border: 1px solid rgba(0,0,0,0.08);
     }
-
+    /* ── mic ring ── */
+    .mic-wrap { display: flex; flex-direction: column; align-items: center; gap: 10px; }
+    .mic-ring {
+      width: 80px; height: 80px; border-radius: 50%;
+      background: var(--teal-lt); display: flex; align-items: center; justify-content: center;
+      font-size: 2rem; transition: background 300ms;
+    }
+    .mic-ring.listening { animation: mic-pulse 1.6s ease-out infinite; background: var(--teal-lt); }
+    .mic-ring.idle      { background: #e2e8f0; }
+    .mic-label { font-size: 0.9rem; color: var(--muted); font-weight: 600; }
+    @keyframes mic-pulse {
+      0%   { box-shadow: 0 0 0 0   rgba(15,118,110,0.35); }
+      70%  { box-shadow: 0 0 0 36px rgba(15,118,110,0); }
+      100% { box-shadow: 0 0 0 0   rgba(15,118,110,0); }
+    }
+    /* ── yes/no ── */
+    .yn-row { display: flex; gap: 16px; width: 100%; justify-content: center; flex-wrap: wrap; }
+    .yn-btn {
+      flex: 1; max-width: 240px; min-height: 72px; border: none; border-radius: 999px;
+      font-size: 1.3rem; font-weight: 700; cursor: pointer;
+      display: flex; align-items: center; justify-content: center; gap: 10px;
+      transition: transform 120ms, box-shadow 120ms;
+    }
+    .yn-btn:hover  { transform: translateY(-2px); }
+    .yn-btn:active { transform: scale(0.97); }
+    .yn-yes { background: linear-gradient(135deg, #16a34a, #15803d); color: #fff; box-shadow: 0 8px 24px rgba(21,128,61,0.28); }
+    .yn-no  { background: linear-gradient(135deg, #dc2626, #b91c1c); color: #fff; box-shadow: 0 8px 24px rgba(185,28,28,0.26); }
+    /* ── role selection (final step) ── */
+    .role-row { display: flex; gap: 16px; width: 100%; justify-content: center; flex-wrap: wrap; }
+    .role-btn {
+      flex: 1; max-width: 260px; min-height: 120px; border: none; border-radius: 28px;
+      font-weight: 700; cursor: pointer; display: flex; flex-direction: column;
+      align-items: center; justify-content: center; gap: 10px;
+      transition: transform 140ms, box-shadow 140ms;
+    }
+    .role-btn:hover  { transform: translateY(-3px); }
+    .role-btn:active { transform: scale(0.97); }
+    .role-icon { font-size: 3rem; line-height: 1; }
+    .role-label { font-size: 1.15rem; }
+    .role-child  { background: linear-gradient(135deg, var(--teal), var(--teal-dark)); color: #fff; box-shadow: 0 10px 32px rgba(15,118,110,0.30); }
+    .role-parent { background: linear-gradient(135deg, #7c3aed, #5b21b6); color: #fff; box-shadow: 0 10px 32px rgba(124,58,237,0.28); }
+    /* ── confirmation cards ── */
+    .confirmations { display: grid; gap: 10px; width: 100%; }
     .confirm-card {
-      display: none;
-      text-align: left;
-      background: rgba(255,255,255,0.82);
-      border: 1px solid rgba(47, 36, 29, 0.08);
-      border-radius: 18px;
-      padding: 14px 16px;
+      display: none; background: rgba(255,255,255,0.82);
+      border: 1px solid rgba(0,0,0,0.08); border-radius: 16px; padding: 12px 16px;
     }
-
     .confirm-card.visible { display: block; }
-
-    .confirm-label {
-      display: block;
-      margin-bottom: 6px;
-      font-size: 0.74rem;
-      letter-spacing: 0.14em;
-      text-transform: uppercase;
-      color: var(--teal-dark);
-      font-weight: 700;
+    .confirm-label { font-size: 0.68rem; letter-spacing: 0.14em; text-transform: uppercase; color: var(--teal-dark); font-weight: 700; display: block; margin-bottom: 4px; }
+    .confirm-value { font-size: 1rem; color: var(--ink); word-break: break-word; }
+    /* ── skip ── */
+    .skip-btn {
+      background: none; border: none; color: var(--muted); font-size: 0.85rem;
+      cursor: pointer; text-decoration: underline; padding: 6px 12px;
+      min-height: 44px; opacity: 0; transition: opacity 0.5s;
     }
-
-    .confirm-value {
-      margin: 0;
-      font-size: 1.05rem;
-      line-height: 1.5;
-      color: var(--ink);
-      word-break: break-word;
-    }
-
-    .hint {
-      margin-top: 18px;
-      font-size: 0.9rem;
-      color: var(--muted);
-    }
-
-    @keyframes mouthOpen {
-      from { transform: scaleX(0.92) scaleY(0.7); }
-      to { transform: scaleX(1.04) scaleY(1.52); }
-    }
-
-    @keyframes lipMove {
-      from { transform: translateY(0px) scaleX(0.98); }
-      to { transform: translateY(2px) scaleX(1.04); }
-    }
-
-    @keyframes bobTalk {
-      from { transform: translateY(0px); }
-      to { transform: translateY(-3px); }
-    }
-
-    @keyframes glowFloat {
-      0%, 100% { transform: translateY(0px) scale(1); }
-      50% { transform: translateY(-8px) scale(1.04); }
-    }
-
-    @keyframes glowPulse {
-      0%, 100% { transform: scale(1); opacity: 0.82; }
-      50% { transform: scale(1.12); opacity: 1; }
-    }
-
-    @media (max-width: 640px) {
-      .shell { padding: 16px 12px 24px; }
-      .stage { padding: 24px 16px 22px; }
-    }
+    /* ── util ── */
+    [hidden] { display: none !important; }
   </style>
 </head>
 <body>
-  <main class="shell">
-    <section class="stage">
-      <h1>TalkBuddy</h1>
+<div class="page">
+  <div class="card" id="card">
 
-      <div class="avatar-wrap speaker" id="speaker-shell">
-        <div class="avatar-orb"></div>
-        <svg class="avatar" viewBox="0 0 320 360" role="img" aria-label="Talking lady lips animation">
-          <defs>
-            <linearGradient id="skinTone" x1="0%" y1="0%" x2="100%" y2="100%">
-              <stop offset="0%" stop-color="#f6d2bf" />
-              <stop offset="100%" stop-color="#e9b89a" />
-            </linearGradient>
-            <linearGradient id="hairTone" x1="0%" y1="0%" x2="100%" y2="100%">
-              <stop offset="0%" stop-color="#4a3127" />
-              <stop offset="100%" stop-color="#241812" />
-            </linearGradient>
-          </defs>
-          <path d="M78 120c0-71 45-112 82-112 55 0 93 44 93 112v31H78z" fill="url(#hairTone)"/>
-          <path d="M86 156c0-71 30-103 74-103 58 0 76 47 76 103v78c0 53-33 92-76 92-49 0-74-38-74-92z" fill="url(#skinTone)"/>
-          <ellipse cx="126" cy="170" rx="11" ry="7" fill="#2c211d"/>
-          <ellipse cx="195" cy="170" rx="11" ry="7" fill="#2c211d"/>
-          <path d="M116 149c8-10 21-15 32-12" stroke="#4a3127" stroke-width="6" stroke-linecap="round" fill="none"/>
-          <path d="M174 137c10-4 24 2 31 12" stroke="#4a3127" stroke-width="6" stroke-linecap="round" fill="none"/>
-          <path d="M160 176c-5 11-8 23-8 35 7 3 15 3 22 0" stroke="#c88d73" stroke-width="4" stroke-linecap="round" fill="none"/>
-          <g>
-            <ellipse class="mouth-open" cx="160" cy="245" rx="21" ry="10" fill="#86283d" opacity="0"/>
-            <path class="mouth-lips" d="M133 239c9 10 20 14 27 14 9 0 19-3 27-14" fill="none" stroke="#aa4c62" stroke-width="8" stroke-linecap="round"/>
-            <path class="mouth-lips" d="M133 241c8 12 18 18 27 18 9 0 20-6 27-18" fill="none" stroke="#c06277" stroke-width="6" stroke-linecap="round" opacity="0.55"/>
-          </g>
-          <path d="M110 300c15 15 34 24 50 24 21 0 40-7 56-24" stroke="#dca48d" stroke-width="7" stroke-linecap="round" fill="none"/>
-        </svg>
-      </div>
+    <!-- Animated lips -->
+    <div class="lips-wrap idle" id="lips">
+      <svg viewBox="0 0 200 100" xmlns="http://www.w3.org/2000/svg">
+        <path d="M20 50 C50 20,80 15,100 22 C120 15,150 20,180 50 C155 40,130 36,100 38 C70 36,45 40,20 50 Z"
+              fill="#e05c7a" stroke="#c0445f" stroke-width="1.5"/>
+        <path d="M70 28 Q100 18 130 28" fill="none" stroke="#f08098" stroke-width="2" stroke-linecap="round"/>
+        <path d="M20 50 C45 60,70 70,100 72 C130 70,155 60,180 50 C155 56,130 62,100 64 C70 62,45 56,20 50 Z"
+              fill="#d44060" stroke="#b03050" stroke-width="1.5"/>
+        <ellipse cx="100" cy="62" rx="30" ry="5" fill="#e87090" opacity="0.4"/>
+      </svg>
+    </div>
 
-      <p class="status" id="status-text">Welcome session will begin in a moment.</p>
+    <!-- Step progress -->
+    <div class="steps">
+      <span class="step active" id="step-child">Child Name</span>
+      <span class="step"        id="step-caregiver">Caregiver</span>
+      <span class="step"        id="step-ready">Ready!</span>
+    </div>
 
-      <div class="confirmations">
-        <article class="confirm-card" id="confirm-first-name">
-          <span class="confirm-label">Confirmed First Name Spelling</span>
-          <p class="confirm-value" id="confirm-first-name-value"></p>
-        </article>
-        <article class="confirm-card" id="confirm-last-name">
-          <span class="confirm-label">Confirmed Last Name Spelling</span>
-          <p class="confirm-value" id="confirm-last-name-value"></p>
-        </article>
-        <article class="confirm-card" id="confirm-caregiver-name">
-          <span class="confirm-label">Recorded Parent Or Caregiver Name</span>
-          <p class="confirm-value" id="confirm-caregiver-name-value"></p>
-        </article>
-      </div>
+    <!-- Main spoken prompt -->
+    <p class="prompt" id="prompt">Welcome to TalkBuddy!<br><small style="font-weight:400;font-size:0.75em;color:#64748b">Tap anywhere to begin</small></p>
 
-      <p class="hint">Only the confirmed name spellings are shown on screen. Prompts are spoken aloud.</p>
-    </section>
-  </main>
+    <!-- Large letter display -->
+    <div class="name-display" id="name-display" hidden>
+      <div class="name-letters" id="name-letters"></div>
+    </div>
 
-  <script>
-    (() => {
-      const Recognition = window.SpeechRecognition || window.webkitSpeechRecognition;
-      const supportsRecognition = typeof Recognition !== 'undefined';
-      const speakerShell = document.getElementById('speaker-shell');
-      const statusText = document.getElementById('status-text');
+    <!-- Interim transcript -->
+    <div class="interim" id="interim" hidden></div>
 
-      const cards = {
-        firstName: document.getElementById('confirm-first-name'),
-        lastName: document.getElementById('confirm-last-name'),
-        caregiverName: document.getElementById('confirm-caregiver-name'),
+    <!-- Mic -->
+    <div class="mic-wrap" id="mic-wrap" hidden>
+      <div class="mic-ring idle" id="mic-ring">🎤</div>
+      <p class="mic-label" id="mic-label">Listening…</p>
+    </div>
+
+    <!-- Yes / No -->
+    <div class="yn-row" id="yn-row" hidden>
+      <button class="yn-btn yn-yes" id="yn-yes">✓ Yes, correct!</button>
+      <button class="yn-btn yn-no"  id="yn-no">✗ No, try again</button>
+    </div>
+
+    <!-- Role selection — shown at the very end -->
+    <div class="role-row" id="role-row" hidden>
+      <button class="role-btn role-child" id="role-child">
+        <span class="role-icon">🧒</span>
+        <span class="role-label">I'm the child<br><small style="font-weight:400;font-size:0.8em">Start practice!</small></span>
+      </button>
+      <button class="role-btn role-parent" id="role-parent">
+        <span class="role-icon">👨‍⚕️</span>
+        <span class="role-label">Parent / Therapist<br><small style="font-weight:400;font-size:0.8em">Open dashboard</small></span>
+      </button>
+    </div>
+
+    <!-- Confirmed name cards -->
+    <div class="confirmations" id="confirmations">
+      <article class="confirm-card" id="cc-first">
+        <span class="confirm-label">Child First Name</span>
+        <p class="confirm-value" id="cc-first-val"></p>
+      </article>
+      <article class="confirm-card" id="cc-last">
+        <span class="confirm-label">Child Last Name</span>
+        <p class="confirm-value" id="cc-last-val"></p>
+      </article>
+      <article class="confirm-card" id="cc-carer">
+        <span class="confirm-label">Caregiver Name</span>
+        <p class="confirm-value" id="cc-carer-val"></p>
+      </article>
+    </div>
+
+    <button class="skip-btn" id="skip-btn">Skip — choose manually instead</button>
+  </div>
+</div>
+
+<script>
+(() => {
+  'use strict';
+
+  /* ── DOM ── */
+  const card       = document.getElementById('card');
+  const lips       = document.getElementById('lips');
+  const prompt     = document.getElementById('prompt');
+  const nameDisp   = document.getElementById('name-display');
+  const nameLetters= document.getElementById('name-letters');
+  const interim    = document.getElementById('interim');
+  const micWrap    = document.getElementById('mic-wrap');
+  const micRing    = document.getElementById('mic-ring');
+  const micLabel   = document.getElementById('mic-label');
+  const ynRow      = document.getElementById('yn-row');
+  const ynYes      = document.getElementById('yn-yes');
+  const ynNo       = document.getElementById('yn-no');
+  const roleRow    = document.getElementById('role-row');
+  const roleChild  = document.getElementById('role-child');
+  const roleParent = document.getElementById('role-parent');
+  const stepChild  = document.getElementById('step-child');
+  const stepCarer  = document.getElementById('step-caregiver');
+  const stepReady  = document.getElementById('step-ready');
+  const skipBtn    = document.getElementById('skip-btn');
+  const ccFirst    = document.getElementById('cc-first');
+  const ccLast     = document.getElementById('cc-last');
+  const ccCarer    = document.getElementById('cc-carer');
+  const ccFirstVal = document.getElementById('cc-first-val');
+  const ccLastVal  = document.getElementById('cc-last-val');
+  const ccCarerVal = document.getElementById('cc-carer-val');
+
+  /* ── State ── */
+  const data = { firstName:'', lastName:'', carerName:'' };
+  let started = false;
+
+  /* ── Lips animation ── */
+  function setLips(anim) { lips.className = `lips-wrap ${anim}`; }
+
+  /* ── Step pills ── */
+  function setStep(s) {
+    [stepChild, stepCarer, stepReady].forEach(el => el.classList.remove('active'));
+    if (s === 'child')  stepChild.classList.add('active');
+    if (s === 'carer')  stepCarer.classList.add('active');
+    if (s === 'ready')  stepReady.classList.add('active');
+  }
+
+  /* ── Mic ring ── */
+  function setMic(mode, label) {
+    micWrap.hidden = false;
+    micRing.className = `mic-ring ${mode}`;
+    micLabel.textContent = label;
+  }
+  function hideMic() { micWrap.hidden = true; }
+
+  /* ── Name display ── */
+  function showLetters(text) {
+    nameLetters.textContent = text.toUpperCase();
+    nameDisp.hidden = false;
+  }
+  function hideLetters() { nameDisp.hidden = true; }
+
+  /* ── Interim ── */
+  function setInterim(t) { interim.hidden = !t; interim.textContent = t || ''; }
+
+  /* ── Speak ── */
+  function speak(text) {
+    return new Promise(resolve => {
+      if (!text?.trim()) { resolve(); return; }
+      if (!('speechSynthesis' in window)) { prompt.textContent = text; resolve(); return; }
+      window.speechSynthesis.cancel();
+      const u = new SpeechSynthesisUtterance(text);
+      const voices = window.speechSynthesis.getVoices();
+      const pref = voices.find(v => /female|zira|aria|sara|jenny|ava|samantha|victoria|karen/i.test(v.name))
+                || voices.find(v => v.lang.startsWith('en'));
+      if (pref) u.voice = pref;
+      u.rate = 0.92; u.pitch = 1.04;
+      setLips('speak');
+      prompt.textContent = text;
+      const guard = setTimeout(() => { setLips('idle'); resolve(); }, Math.max(text.length * 75, 1200));
+      const fin = () => { clearTimeout(guard); setLips('idle'); resolve(); };
+      u.onend = fin; u.onerror = fin;
+      window.speechSynthesis.speak(u);
+    });
+  }
+
+  /* ── Listen ── */
+  function listenOnce({ interimCb, timeout = 10000 } = {}) {
+    return new Promise(resolve => {
+      const SR = window.SpeechRecognition || window.webkitSpeechRecognition;
+      if (!SR) { resolve(''); return; }
+      const rec = new SR();
+      rec.lang = 'en-US'; rec.continuous = false; rec.interimResults = !!interimCb;
+      let done = false;
+      const finish = val => { if (done) return; done = true; clearTimeout(t); try { rec.abort(); } catch {} resolve((val||'').trim()); };
+      const t = setTimeout(() => finish(''), timeout);
+      rec.onresult = e => {
+        const results = Array.from(e.results);
+        const text = results.map(r => r[0].transcript).join('');
+        if (interimCb) interimCb(text);
+        if (results[results.length-1].isFinal) finish(text);
       };
-      const values = {
-        firstName: document.getElementById('confirm-first-name-value'),
-        lastName: document.getElementById('confirm-last-name-value'),
-        caregiverName: document.getElementById('confirm-caregiver-name-value'),
+      rec.onerror = () => finish('');
+      rec.onend   = () => finish('');
+      try { rec.start(); } catch { finish(''); }
+    });
+  }
+
+  /* ── Yes / No tap ── */
+  function askYesNo() {
+    return new Promise(resolve => {
+      ynRow.hidden = false;
+      const fin = val => {
+        ynRow.hidden = true;
+        ynYes.removeEventListener('click', onYes);
+        ynNo.removeEventListener('click', onNo);
+        resolve(val);
       };
+      const onYes = () => fin(true);
+      const onNo  = () => fin(false);
+      ynYes.addEventListener('click', onYes);
+      ynNo.addEventListener('click', onNo);
+    });
+  }
 
-      const welcomeData = {
-        childFirstNameAudioText: '',
-        childLastNameAudioText: '',
-        childFirstNameSpelling: '',
-        childLastNameSpelling: '',
-        caregiverNameAudioText: '',
-        createdAt: '',
-      };
+  /* ── Spell parsing ── */
+  const NATO = { alpha:'A',bravo:'B',charlie:'C',delta:'D',echo:'E',foxtrot:'F',
+    golf:'G',hotel:'H',india:'I',juliet:'J',kilo:'K',lima:'L',mike:'M',
+    november:'N',oscar:'O',papa:'P',quebec:'Q',romeo:'R',sierra:'S',tango:'T',
+    uniform:'U',victor:'V',whiskey:'W','x-ray':'X',yankee:'Y',zulu:'Z',
+    ay:'A',bee:'B',see:'C',dee:'D',ee:'E',ef:'F',eff:'F',gee:'G',
+    aitch:'H',eye:'I',jay:'J',kay:'K',el:'L',ell:'L',em:'M',en:'N',
+    oh:'O',pee:'P',cue:'Q',are:'R',ar:'R',ess:'S',tee:'T',you:'U',
+    vee:'V','double you':'W',ex:'X',why:'Y',zee:'Z',zed:'Z' };
 
-      const flow = [
-        { key: 'intro', prompt: 'Welcome to TalkBuddy.', mode: 'speak-only' },
-        { key: 'childFirstName', prompt: 'Please say the kid's first name.', mode: 'listen' },
-        { key: 'childLastName', prompt: 'Please say the kid's last name.', mode: 'listen' },
-        { key: 'spellFirstName', prompt: 'Can you please spell first name?', mode: 'listen' },
-        { key: 'confirmFirstName', prompt: 'Please correct me if I am wrong.', mode: 'confirm-first' },
-        { key: 'spellLastName', prompt: 'Can you please spell last name?', mode: 'listen' },
-        { key: 'confirmLastName', prompt: 'Please correct me if I am wrong.', mode: 'confirm-last' },
-        { key: 'caregiverName', prompt: 'Please say the parent or caregiver name.', mode: 'listen' },
-        { key: 'finish', prompt: 'Let's start playing.', mode: 'finish' },
-      ];
+  function parseSpelling(heard) {
+    const tokens = heard.toLowerCase().split(/[\s\-,\.]+/).filter(Boolean);
+    const letters = tokens.map(t =>
+      (t.length === 1 && /[a-z]/.test(t)) ? t.toUpperCase() : (NATO[t] || '')
+    );
+    const result = letters.join('');
+    return result || heard.replace(/\s+/g,'').toUpperCase().slice(0,20);
+  }
 
-      let currentStep = -1;
-      let activePrompt = '';
-      let isRunning = false;
-      let recognition = null;
+  function titleCase(s) {
+    return s.replace(/\w\S*/g, w => w[0].toUpperCase() + w.slice(1).toLowerCase());
+  }
 
-      function saveSession() {
-        welcomeData.createdAt = welcomeData.createdAt || new Date().toISOString();
-        sessionStorage.setItem('talkbuddy.welcomeSession', JSON.stringify(welcomeData));
+  /* ── Show confirmation card ── */
+  function showCard(which, val) {
+    if (which === 'first') { ccFirstVal.textContent = val; ccFirst.classList.add('visible'); }
+    if (which === 'last')  { ccLastVal.textContent  = val; ccLast.classList.add('visible'); }
+    if (which === 'carer') { ccCarerVal.textContent = val; ccCarer.classList.add('visible'); }
+  }
+
+  /* ── Collect name with spell+confirm loop ── */
+  async function collectName(label) {
+    while (true) {
+      // Ask for name
+      await speak(`Please say the child's ${label}.`);
+      setMic('listening', 'Listening…');
+      setInterim('');
+      const heard = await listenOnce({ interimCb: t => setInterim(t), timeout: 9000 });
+      hideMic(); setInterim('');
+
+      // Ask to spell
+      await speak(`Can you please spell the ${label}?`);
+      setMic('listening', 'Spelling…');
+      setInterim('');
+      const spelt = await listenOnce({ interimCb: t => setInterim(t), timeout: 12000 });
+      hideMic(); setInterim('');
+
+      const letters = parseSpelling(spelt || titleCase(heard));
+      showLetters(letters.split('').join('  '));
+
+      // Confirm
+      const readBack = `Please correct me if I'm wrong. Is the ${label}: ${letters.split('').join(', ')}?`;
+      await speak(readBack);
+      prompt.textContent = 'Is this correct?';
+      const yes = await askYesNo();
+      if (yes) { hideLetters(); return letters; }
+
+      // Correction
+      await speak(`Okay, please say the corrected spelling for the ${label}.`);
+      setMic('listening', 'Correction…');
+      setInterim('');
+      const correction = await listenOnce({ interimCb: t => setInterim(t), timeout: 12000 });
+      hideMic(); setInterim('');
+
+      if (correction) {
+        const corrected = parseSpelling(correction);
+        showLetters(corrected.split('').join('  '));
+        await speak(`Is the ${label} now: ${corrected.split('').join(', ')}?`);
+        prompt.textContent = 'Is this right now?';
+        const ok = await askYesNo();
+        if (ok) { hideLetters(); return corrected; }
       }
+    }
+  }
 
-      function setSpeaking(active, status) {
-        speakerShell.classList.toggle('is-speaking', active);
-        if (status) {
-          statusText.textContent = status;
-        }
-      }
+  /* ── Collect caregiver name (no spelling) ── */
+  async function collectCarerName() {
+    await speak('And your name? Please say the parent or caregiver name.');
+    setMic('listening', 'Listening…');
+    setInterim('');
+    const heard = await listenOnce({ interimCb: t => setInterim(t), timeout: 9000 });
+    hideMic(); setInterim('');
+    return titleCase(heard || 'Caregiver');
+  }
 
-      function normalizeSpelling(text) {
-        return text
-          .replace(/[^a-zA-Z\s-]/g, ' ')
-          .trim()
-          .replace(/\s+/g, ' ')
-          .toUpperCase();
-      }
+  /* ── Match child and start session ── */
+  async function startSessionForChild() {
+    try {
+      const children = await fetch('/children').then(r => r.json());
+      const fn = data.firstName.charAt(0).toLowerCase();
+      const matched = children.find(c => c.name.toLowerCase().startsWith(fn)) || children[0];
+      if (!matched) return;
+      const session = await fetch('/session/start', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ child_id: matched.child_id }),
+      }).then(r => r.json());
+      sessionStorage.setItem('tb_session_id',   session.session_id);
+      sessionStorage.setItem('tb_child_id',      matched.child_id);
+      sessionStorage.setItem('tb_child_name',    matched.name);
+      sessionStorage.setItem('tb_session_data',  JSON.stringify(session));
+    } catch { /* network unavailable — session.js will handle redirect */ }
+  }
 
-      function showConfirmation(target, value) {
-        const card = cards[target];
-        const node = values[target];
-        if (!card || !node || !value) return;
-        node.textContent = value;
-        card.classList.add('visible');
-      }
+  /* ── Main wizard ── */
+  async function runWizard() {
+    setStep('child');
 
-      function speak(text, onDone) {
-        activePrompt = text;
-        if (!('speechSynthesis' in window)) {
-          setSpeaking(false, text);
-          onDone?.();
-          return;
-        }
+    await speak('Welcome to TalkBuddy!');
 
-        let completed = false;
-        let started = false;
-        const finish = (status) => {
-          if (completed) return;
-          completed = true;
-          setSpeaking(false, status);
-          onDone?.();
-        };
+    // Child first name
+    data.firstName = await collectName('first name');
+    showCard('first', data.firstName);
 
-        window.speechSynthesis.cancel();
-        const utterance = new SpeechSynthesisUtterance(text);
-        const voices = window.speechSynthesis.getVoices();
-        const preferred = voices.find(v => /female|zira|aria|sara|jenny|ava|samantha|victoria|karen/i.test(v.name));
-        if (preferred) utterance.voice = preferred;
-        utterance.rate = 0.95;
-        utterance.pitch = 1.04;
-        utterance.onstart = () => {
-          started = true;
-          setSpeaking(true, 'Device is speaking...');
-        };
-        utterance.onend = () => finish('Listening for response...');
-        utterance.onerror = () => finish('Speech playback was blocked. Tap anywhere to continue the welcome session.');
-        window.speechSynthesis.speak(utterance);
+    // Child last name
+    data.lastName = await collectName('last name');
+    showCard('last', data.lastName);
 
-        window.setTimeout(() => {
-          if (!started && !completed) {
-            finish('Speech playback needs a tap in this browser. Tap anywhere to continue the welcome session.');
-          }
-        }, 1600);
-      }
+    setStep('carer');
 
-      function listenOnce(onResult) {
-        if (!supportsRecognition) {
-          const typed = window.prompt('Speech recognition is not available in this browser. Type the response here:');
-          onResult((typed || '').trim());
-          return;
-        }
+    // Caregiver name
+    data.carerName = await collectCarerName();
+    showCard('carer', data.carerName);
 
-        recognition?.abort();
-        recognition = new Recognition();
-        recognition.lang = 'en-US';
-        recognition.interimResults = false;
-        recognition.maxAlternatives = 1;
-        recognition.continuous = false;
+    setStep('ready');
 
-        recognition.onresult = (event) => {
-          const transcript = event.results?.[0]?.[0]?.transcript?.trim() || '';
-          onResult(transcript);
-        };
-        recognition.onerror = () => {
-          const typed = window.prompt('I did not catch that. Type the response here:');
-          onResult((typed || '').trim());
-        };
-        recognition.onnomatch = () => {
-          const typed = window.prompt('Please type the response so I can store it for this session:');
-          onResult((typed || '').trim());
-        };
-        try {
-          recognition.start();
-        } catch {
-          const typed = window.prompt('Please type the response so I can store it for this session:');
-          onResult((typed || '').trim());
-        }
-      }
+    await speak("Great! Let's start playing. Who is using this device?");
 
-      function askYesNo(callback) {
-        listenOnce((answer) => {
-          const normalized = answer.toLowerCase();
-          if (normalized.includes('yes')) {
-            callback(true);
-            return;
-          }
-          if (normalized.includes('no')) {
-            callback(false);
-            return;
-          }
-          callback(window.confirm('Was the spelling correct? Click OK for Yes or Cancel for No.'));
-        });
-      }
+    // Role selection
+    hideMic();
+    hideLetters();
+    setInterim('');
+    ynRow.hidden = true;
+    prompt.textContent = 'Who is using this device?';
+    roleRow.hidden = false;
+  }
 
-      function advance() {
-        currentStep += 1;
-        if (currentStep >= flow.length) return;
-        runStep(flow[currentStep]);
-      }
+  /* ── Role buttons ── */
+  roleChild.addEventListener('click', async () => {
+    roleRow.hidden = true;
+    prompt.textContent = 'Starting your practice session…';
+    setLips('speak');
+    await startSessionForChild();
+    window.location.href = '/session';
+  });
 
-      function listenForStep(step) {
-        listenOnce((transcript) => {
-          const text = transcript || '(no response captured)';
-          if (step.key === 'childFirstName') {
-            welcomeData.childFirstNameAudioText = text;
-            saveSession();
-            advance();
-            return;
-          }
-          if (step.key === 'childLastName') {
-            welcomeData.childLastNameAudioText = text;
-            saveSession();
-            advance();
-            return;
-          }
-          if (step.key === 'spellFirstName') {
-            welcomeData.childFirstNameSpelling = normalizeSpelling(text);
-            showConfirmation('firstName', welcomeData.childFirstNameSpelling);
-            saveSession();
-            advance();
-            return;
-          }
-          if (step.key === 'spellLastName') {
-            welcomeData.childLastNameSpelling = normalizeSpelling(text);
-            showConfirmation('lastName', welcomeData.childLastNameSpelling);
-            saveSession();
-            advance();
-            return;
-          }
-          if (step.key === 'caregiverName') {
-            welcomeData.caregiverNameAudioText = text;
-            showConfirmation('caregiverName', text);
-            saveSession();
-            advance();
-          }
-        });
-      }
+  roleParent.addEventListener('click', () => {
+    roleRow.hidden = true;
+    prompt.textContent = 'Opening caregiver dashboard…';
+    window.location.href = '/therapy';
+  });
 
-      function confirmSpelling(which) {
-        const isFirst = which === 'first';
-        const spelling = isFirst ? welcomeData.childFirstNameSpelling : welcomeData.childLastNameSpelling;
-        const replay = spelling ? `${activePrompt} ${spelling.split(' ').join('. ')}.` : activePrompt;
-        speak(replay, () => {
-          askYesNo((accepted) => {
-            if (accepted) {
-              setSpeaking(false, 'Confirmation saved for this session.');
-              advance();
-              return;
-            }
-            const correctionPrompt = isFirst
-              ? 'Please say the corrected first name spelling.'
-              : 'Please say the corrected last name spelling.';
-            speak(correctionPrompt, () => {
-              listenOnce((correction) => {
-                const normalized = normalizeSpelling(correction || spelling);
-                if (isFirst) {
-                  welcomeData.childFirstNameSpelling = normalized;
-                  showConfirmation('firstName', normalized);
-                } else {
-                  welcomeData.childLastNameSpelling = normalized;
-                  showConfirmation('lastName', normalized);
-                }
-                saveSession();
-                setSpeaking(false, 'Correction stored for this session.');
-                advance();
-              });
-            });
-          });
-        });
-      }
+  /* ── Skip button ── */
+  skipBtn.addEventListener('click', () => {
+    window.location.href = '/therapy';
+  });
 
-      async function matchAndStartSession() {
-        // Try to match child by name from backend, then create a session
-        try {
-          const children = await fetch('/children').then(r => r.json());
-          const fn = (welcomeData.childFirstNameSpelling || welcomeData.childFirstNameAudioText || '').toLowerCase();
-          const ln = (welcomeData.childLastNameSpelling  || welcomeData.childLastNameAudioText  || '').toLowerCase();
-          const matched = children.find(c => {
-            const parts = c.name.toLowerCase().split(/\s+/);
-            return parts[0].startsWith(fn.charAt(0) || 'x');
-          }) || children[0];
+  /* ── Tap anywhere on card to start ── */
+  card.addEventListener('click', function onFirstTap() {
+    card.removeEventListener('click', onFirstTap);
+    card.classList.add('active');
+    skipBtn.style.opacity = '1';
+    // Warm up voices (user gesture now available)
+    if ('speechSynthesis' in window) {
+      const w = new SpeechSynthesisUtterance('');
+      window.speechSynthesis.speak(w);
+      window.speechSynthesis.cancel();
+      window.speechSynthesis.getVoices();
+    }
+    if (!started) { started = true; runWizard().catch(() => { window.location.href = '/therapy'; }); }
+  }, { once: true });
 
-          if (matched) {
-            const session = await fetch('/session/start', {
-              method: 'POST',
-              headers: { 'Content-Type': 'application/json' },
-              body: JSON.stringify({ child_id: matched.child_id }),
-            }).then(r => r.json());
-
-            sessionStorage.setItem('tb_session_id', session.session_id);
-            sessionStorage.setItem('tb_child_id',   matched.child_id);
-            sessionStorage.setItem('tb_child_name', matched.name);
-            sessionStorage.setItem('tb_session_data', JSON.stringify(session));
-          }
-        } catch (e) {
-          // Network unavailable — session page will show a fallback
-        }
-        sessionStorage.setItem('talkbuddy.welcomeSession', JSON.stringify(welcomeData));
-      }
-
-      function finishWelcome() {
-        saveSession();
-        speak(activePrompt, async () => {
-          setSpeaking(false, 'Starting your session…');
-          await matchAndStartSession();
-          window.setTimeout(() => {
-            window.location.href = '/session';
-          }, 800);
-        });
-      }
-
-      function runStep(step) {
-        if (!step) return;
-        activePrompt = step.prompt;
-
-        if (step.mode === 'speak-only') {
-          speak(step.prompt, () => advance());
-          return;
-        }
-        if (step.mode === 'listen') {
-          speak(step.prompt, () => listenForStep(step));
-          return;
-        }
-        if (step.mode === 'confirm-first') {
-          confirmSpelling('first');
-          return;
-        }
-        if (step.mode === 'confirm-last') {
-          confirmSpelling('last');
-          return;
-        }
-        if (step.mode === 'finish') {
-          finishWelcome();
-        }
-      }
-
-      function startWelcome() {
-        if (isRunning) return;
-        isRunning = true;
-        statusText.textContent = 'Starting welcome session...';
-        advance();
-      }
-
-      if ('speechSynthesis' in window) {
-        window.speechSynthesis.getVoices();
-        window.speechSynthesis.addEventListener('voiceschanged', () => window.speechSynthesis.getVoices(), { once: true });
-      }
-
-      function resumeOnInteraction() {
-        if (!isRunning) {
-          startWelcome();
-          return;
-        }
-        const step = flow[Math.max(currentStep, 0)];
-        if (!step) return;
-        if (step.mode === 'listen') {
-          listenForStep(step);
-          return;
-        }
-        if (step.mode === 'confirm-first') {
-          confirmSpelling('first');
-          return;
-        }
-        if (step.mode === 'confirm-last') {
-          confirmSpelling('last');
-        }
-      }
-
-      ['pointerdown', 'keydown'].forEach((eventName) => {
-        window.addEventListener(eventName, () => {
-          if (statusText.textContent.includes('Tap anywhere')) {
-            resumeOnInteraction();
-          }
-        }, { passive: true });
-      });
-
-      window.setTimeout(() => {
-        startWelcome();
-      }, 2000);
-    })();
-  </script>
+  // Pre-warm voices on page load
+  if ('speechSynthesis' in window) {
+    window.speechSynthesis.getVoices();
+    window.speechSynthesis.addEventListener('voiceschanged', () => window.speechSynthesis.getVoices(), { once: true });
+  }
+})();
+</script>
 </body>
 </html>
