@@ -25,8 +25,33 @@
   <div id="setup-screen" class="setup-screen">
     <div class="wizard-card" id="wizard-card">
 
-      <!-- Mascot -->
-      <div class="mascot wizard-mascot" id="wizard-mascot" aria-hidden="true">🦊</div>
+      <!-- Animated lips mascot (SVG, no face) -->
+      <div class="lips-mascot" id="wizard-mascot" aria-hidden="true">
+        <svg id="lips-svg" viewBox="0 0 200 100" xmlns="http://www.w3.org/2000/svg">
+          <!-- Upper lip -->
+          <path id="lip-upper"
+            d="M 20 50 C 50 20, 80 15, 100 22 C 120 15, 150 20, 180 50
+               C 155 40, 130 36, 100 38 C 70 36, 45 40, 20 50 Z"
+            fill="#e05c7a" stroke="#c0445f" stroke-width="1.5"/>
+          <!-- Cupid's bow highlight -->
+          <path d="M 70 28 Q 100 18 130 28" fill="none" stroke="#f08098" stroke-width="2" stroke-linecap="round"/>
+          <!-- Lower lip -->
+          <path id="lip-lower"
+            d="M 20 50 C 45 60, 70 70, 100 72 C 130 70, 155 60, 180 50
+               C 155 56, 130 62, 100 64 C 70 62, 45 56, 20 50 Z"
+            fill="#d44060" stroke="#b03050" stroke-width="1.5"/>
+          <!-- Lower lip highlight -->
+          <ellipse cx="100" cy="62" rx="30" ry="5" fill="#e87090" opacity="0.4"/>
+          <!-- Teeth (shown when open) -->
+          <clipPath id="mouth-clip">
+            <path id="mouth-clip-path"
+              d="M 30 50 C 60 56, 80 60, 100 61 C 120 60, 140 56, 170 50
+                 C 155 44, 130 40, 100 40 C 70 40, 45 44, 30 50 Z"/>
+          </clipPath>
+          <rect id="teeth" x="40" y="45" width="120" height="14" rx="3"
+            fill="white" clip-path="url(#mouth-clip)" opacity="0"/>
+        </svg>
+      </div>
 
       <!-- Step progress pills -->
       <div class="wizard-steps" aria-label="Setup progress">
@@ -126,7 +151,20 @@
 
       <!-- Left: mascot + status -->
       <div class="mascot-column">
-        <span class="mascot idle" id="mascot" role="img" aria-label="TalkBuddy mascot">🦊</span>
+        <div class="mascot lips-mascot idle" id="mascot" role="img" aria-label="TalkBuddy mascot">
+          <svg viewBox="0 0 200 100" xmlns="http://www.w3.org/2000/svg">
+            <path class="lip-upper-sess"
+              d="M 20 50 C 50 20, 80 15, 100 22 C 120 15, 150 20, 180 50
+                 C 155 40, 130 36, 100 38 C 70 36, 45 40, 20 50 Z"
+              fill="#e05c7a" stroke="#c0445f" stroke-width="1.5"/>
+            <path d="M 70 28 Q 100 18 130 28" fill="none" stroke="#f08098" stroke-width="2" stroke-linecap="round"/>
+            <path class="lip-lower-sess"
+              d="M 20 50 C 45 60, 70 70, 100 72 C 130 70, 155 60, 180 50
+                 C 155 56, 130 62, 100 64 C 70 62, 45 56, 20 50 Z"
+              fill="#d44060" stroke="#b03050" stroke-width="1.5"/>
+            <ellipse cx="100" cy="62" rx="30" ry="5" fill="#e87090" opacity="0.4"/>
+          </svg>
+        </div>
 
         <div class="mascot-bubble" id="mascot-bubble" hidden aria-live="polite" aria-atomic="true">
           <p id="mascot-bubble-text"></p>

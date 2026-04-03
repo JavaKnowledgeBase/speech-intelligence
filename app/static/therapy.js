@@ -154,8 +154,8 @@ const el = {
 };
 
 /* ─── Mascot helpers ─────────────────────────────────────────────────────── */
-function setMascotState(state) {
-  el.mascot.className = `mascot ${state}`;
+function setMascotState(animState) {
+  el.mascot.className = `mascot lips-mascot ${animState}`;
 }
 
 function showMascotBubble(text) {
@@ -908,13 +908,13 @@ async function runWizard() {
   wHideLetters();
   wSetMic('hidden');
   el.wizardConfirm.hidden = true;
-  el.wizardMascot.className = 'mascot speak';
+  el.wizardMascot.className = 'lips-mascot speak';
 
   // Step 1 — Welcome
   const welcome = 'Welcome to TalkBuddy!';
   el.wizardPrompt.textContent = welcome;
   await speak(welcome);
-  el.wizardMascot.className = 'mascot idle';
+  el.wizardMascot.className = 'lips-mascot idle';
 
   // Step 2–4 — Child first name (with spelling + confirm)
   const firstName = await wCollectName("Please say the child's first name.", 'first name');

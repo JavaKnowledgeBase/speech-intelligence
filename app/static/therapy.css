@@ -226,9 +226,7 @@ button, select, input { font: inherit; }
 .wizard-card::-webkit-scrollbar { display: none; }
 
 .wizard-mascot {
-  font-size: clamp(5rem, 12vw, 9rem);
-  line-height: 1;
-  animation: mascot-idle 4s ease-in-out infinite;
+  /* replaced by lips-mascot */
 }
 
 /* Step pills */
@@ -451,6 +449,55 @@ button, select, input { font: inherit; }
   align-items: center;
 }
 
+/* ── Lips mascot ── */
+.lips-mascot {
+  width: clamp(160px, 28vw, 300px);
+  filter: drop-shadow(0 6px 18px rgba(208, 64, 96, 0.30));
+  transition: transform 200ms;
+}
+
+.lips-mascot svg { width: 100%; height: auto; display: block; }
+
+/* Idle — gentle breathe */
+.lips-mascot.idle svg   { animation: lips-breathe 3.5s ease-in-out infinite; }
+/* Listen — subtle lean */
+.lips-mascot.listen svg { animation: lips-listen 1.2s ease-in-out infinite; }
+/* Speak / coach — open/close mouth */
+.lips-mascot.speak svg,
+.lips-mascot.speak #lip-upper,
+.lips-mascot.speak .lip-upper-sess { animation: lips-speak-upper 0.28s ease-in-out infinite alternate; }
+.lips-mascot.speak #lip-lower,
+.lips-mascot.speak .lip-lower-sess { animation: lips-speak-lower 0.28s ease-in-out infinite alternate; }
+.lips-mascot.speak #teeth          { animation: lips-teeth-show  0.28s ease-in-out infinite alternate; }
+/* Cheer — big bounce open */
+.lips-mascot.cheer svg { animation: lips-cheer 500ms cubic-bezier(0.34,1.56,0.64,1) forwards; }
+
+@keyframes lips-breathe {
+  0%,100% { transform: scaleY(1) translateY(0); }
+  50%      { transform: scaleY(1.04) translateY(-4px); }
+}
+@keyframes lips-listen {
+  0%,100% { transform: scale(1); }
+  50%      { transform: scale(1.06); }
+}
+@keyframes lips-speak-upper {
+  from { transform: translateY(0); }
+  to   { transform: translateY(-7px); }
+}
+@keyframes lips-speak-lower {
+  from { transform: translateY(0); }
+  to   { transform: translateY(7px); }
+}
+@keyframes lips-teeth-show {
+  from { opacity: 0; }
+  to   { opacity: 1; }
+}
+@keyframes lips-cheer {
+  0%   { transform: scale(0.8) rotate(-4deg); }
+  60%  { transform: scale(1.22) rotate(3deg); }
+  100% { transform: scale(1.08) rotate(-2deg); }
+}
+
 /* ── Mascot column ── */
 .mascot-column {
   display: flex;
@@ -461,16 +508,9 @@ button, select, input { font: inherit; }
 }
 
 .mascot {
-  font-size: clamp(6rem, 18vw, 18rem);
-  line-height: 1;
   display: block;
   transition: transform 200ms;
 }
-
-.mascot.idle    { animation: mascot-idle 4s ease-in-out infinite; }
-.mascot.listen  { animation: mascot-listen 1.4s ease-in-out infinite; }
-.mascot.speak   { animation: mascot-speak 0.35s ease-in-out infinite alternate; }
-.mascot.cheer   { animation: mascot-cheer 500ms cubic-bezier(0.34, 1.56, 0.64, 1) forwards; }
 
 .mascot-bubble {
   background: var(--surface);
