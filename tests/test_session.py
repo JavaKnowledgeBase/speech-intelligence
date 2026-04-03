@@ -109,13 +109,13 @@ class TestSpeechTurns:
 
     def test_empty_transcript_eventually_escalates(self, orch, session_id):
         # Force escalation by exhausting retries with a bad transcript
-        for _ in range(4):
+        for _ in range(6):
             result = orch.process_turn(session_id, "zzzzz", attention_score=0.3)
         assert result.action == "escalate"
 
     def test_escalation_creates_alert(self, orch, session_id):
         before_alerts = len(store.alerts)
-        for _ in range(4):
+        for _ in range(6):
             orch.process_turn(session_id, "zzzzz", attention_score=0.3)
         assert len(store.alerts) > before_alerts
 

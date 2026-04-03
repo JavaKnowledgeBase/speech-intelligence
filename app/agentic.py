@@ -32,6 +32,7 @@ from app.models import (
     ProgressSnapshot,
     ProviderStatus,
     ReferenceVector,
+    RealtimeReadiness,
     SessionCompletionResponse,
     SessionDetail,
     SessionEvent,
@@ -68,6 +69,33 @@ class TherapyOrchestrator:
         self.reasoning_expert = ReasoningExpert()
         self.planner_expert = PlannerExpert()
         self.workflow_expert = WorkflowExpert()
+
+    def _realtime_readiness(self) -> RealtimeReadiness:
+        from app.config import settings
+
+        if settings.use_live_provider_calls and settings.configured(settings.google_api_key):
+            return RealtimeReadiness(
+                provider="Gemini Live",
+                ready=True,
+                mode="gemini_live",
+                status="ready",
+                detail="Gemini Live audio is configured before the child session starts.",
+            )
+        if settings.use_live_provider_calls and settings.configured(settings.openai_api_key):
+            return RealtimeReadiness(
+                provider="OpenAI Realtime",
+                ready=True,
+                mode="openai_realtime",
+                status="standby",
+                detail="OpenAI live audio is configured, but Gemini Live is preferred for this session.",
+            )
+        return RealtimeReadiness(
+            provider="Browser Backup",
+            ready=False,
+            mode="browser_backup",
+            status="fallback",
+            detail="No live speech provider is prevalidated, so the session will fall back to browser recognition.",
+        )
 
     def _progress_for(self, child_id: str, target_text: str) -> ProgressSnapshot:
         return store.progress.get((child_id, target_text), ProgressSnapshot(child_id=child_id, target_text=target_text))
@@ -149,6 +177,7 @@ class TherapyOrchestrator:
             environment_ok=environment_ok,
             environment_note=environment_note,
             parent_message=parent_message,
+            realtime_readiness=self._realtime_readiness(),
         )
 
     def _update_progress(self, child_id: str, target_text: str, success: bool) -> ProgressSnapshot:
@@ -181,7 +210,7 @@ class TherapyOrchestrator:
         self._record_event(session, "output_filter_trace", filter_trace[0].summary)
         return alert, filter_trace
 
-    def process_turn(self, session_id: str, transcript: str, attention_score: float) -> SpeechEvaluation:
+    def process_turn(self, session_id: str, transcript: str, attention_score: float, source: str = "stt_stream") -> SpeechEvaluation:
         session = store.sessions[session_id]
         attempted_target = session.current_target
         pronunciation_score, speech_trace = self.speech_expert.evaluate(attempted_target, transcript)
@@ -225,10 +254,22 @@ class TherapyOrchestrator:
 
         self._update_progress(session.child_id, attempted_target, success=False)
 
-        if confidence_score >= 0.58 and session.retries_used < session.max_retries:
+        normalized_transcript = transcript.strip().lower()
+        short_child_attempt = len(normalized_transcript) <= 4
+        fallback_source = source in {"fallback_form", "browser_backup", "stt_stream"}
+        retry_allowed = session.retries_used < session.max_retries
+        should_retry = retry_allowed and (
+            confidence_score >= 0.58
+            or fallback_source
+            or short_child_attempt
+            or engagement_score >= 0.45
+        )
+
+        if should_retry:
             session.retries_used += 1
             self._store_session(session)
-            self._record_event(session, "attempt_retry", f"Retry requested for {attempted_target}")
+            retry_reason = source if source else "unknown"
+            self._record_event(session, "attempt_retry", f"Retry requested for {attempted_target} via {retry_reason}")
             filtered_feedback, filter_trace = self._filter_output("child", "Let us try that one again with one quiet extra cue", owner_id=session.child_id)
             expert_trace = [speech_trace, engagement_trace, reasoning_trace, workflow_trace, filter_trace[0]]
             return SpeechEvaluation(recognized_text=transcript, expected_text=attempted_target, pronunciation_score=round(pronunciation_score, 2), confidence_score=round(confidence_score, 2), engagement_score=engagement_score, action="retry", feedback=filtered_feedback.text, next_target=attempted_target, expert_trace=expert_trace)
@@ -259,7 +300,7 @@ class TherapyOrchestrator:
         event_kind = "runtime_transcript_final" if payload.is_final else "runtime_transcript_partial"
         preview = payload.transcript if len(payload.transcript) <= 80 else f"{payload.transcript[:77]}..."
         self._record_event(session, event_kind, f"{payload.source}: {preview}")
-        evaluation = self.process_turn(payload.session_id, payload.transcript, payload.attention_score) if payload.is_final else None
+        evaluation = self.process_turn(payload.session_id, payload.transcript, payload.attention_score, source=payload.source) if payload.is_final else None
         return VoiceTranscriptIngestionResponse(
             session_id=payload.session_id,
             transcript_record=record,

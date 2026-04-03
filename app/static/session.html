@@ -60,7 +60,7 @@
           <p id="mascot-bubble-text"></p>
         </div>
 
-        <p class="mascot-status" id="mascot-status" aria-live="polite">Getting ready…</p>
+        <p class="mascot-status" id="mascot-status" aria-live="polite">Mic live</p>
       </div>
 
       <div class="target-column">
@@ -85,7 +85,7 @@
     </main>
 
     <!-- Celebration overlay -->
-    <div class="overlay" id="celebration-overlay" hidden role="alertdialog" aria-label="Great job!">
+    <div class="overlay" id="celebration-overlay" hidden style="display:none" role="alertdialog" aria-label="Great job!">
       <div class="overlay-content">
         <div class="overlay-emoji" id="celebration-emoji" aria-hidden="true">🌟</div>
         <p class="overlay-title" id="celebration-title">Great job!</p>
@@ -94,7 +94,7 @@
     </div>
 
     <!-- Help overlay -->
-    <div class="overlay" id="help-overlay" hidden role="alertdialog" aria-label="Help needed">
+    <div class="overlay" id="help-overlay" hidden style="display:none" role="alertdialog" aria-label="Help needed">
       <div class="overlay-content">
         <div class="overlay-emoji" aria-hidden="true">🤝</div>
         <p class="overlay-title">A grown-up will help now.</p>
@@ -104,7 +104,7 @@
     </div>
 
     <!-- Completed overlay -->
-    <div class="overlay" id="completed-overlay" hidden role="alertdialog" aria-label="Session complete">
+    <div class="overlay" id="completed-overlay" hidden style="display:none" role="alertdialog" aria-label="Session complete">
       <div class="overlay-content">
         <div class="overlay-emoji" aria-hidden="true">🏆</div>
         <p class="overlay-title">Session done!</p>
@@ -116,6 +116,8 @@
   </div>
 </div>
 
+<script src="/static/mic-manager.js" defer></script>
 <script src="/static/session.js" defer></script>
 </body>
 </html>
+

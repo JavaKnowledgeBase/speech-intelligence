@@ -8,6 +8,7 @@ from dataclasses import dataclass
 class Settings:
     app_env: str = os.getenv("APP_ENV", "development")
     openai_api_key: str = os.getenv("OPENAI_API_KEY", "")
+    google_api_key: str = os.getenv("GOOGLE_API_KEY", os.getenv("GEMINI_API_KEY", ""))
     deepgram_api_key: str = os.getenv("DEEPGRAM_API_KEY", "")
     hume_api_key: str = os.getenv("HUME_API_KEY", "")
     livekit_url: str = os.getenv("LIVEKIT_URL", "")

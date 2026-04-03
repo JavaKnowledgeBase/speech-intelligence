@@ -159,7 +159,7 @@ class SessionState(BaseModel):
     current_goal_id: str
     current_target: str
     retries_used: int = 0
-    max_retries: int = 2
+    max_retries: int = 4
     reward_points: int = 0
     events: list[SessionEvent] = Field(default_factory=list)
 
@@ -273,7 +273,7 @@ class VoiceTranscriptRequest(BaseModel):
     is_final: bool = False
     elapsed_ms: int = Field(ge=0, default=0)
     attention_score: float = Field(ge=0.0, le=1.0, default=0.8)
-    source: Literal["stt_stream", "fallback_form"] = "stt_stream"
+    source: Literal["stt_stream", "fallback_form", "gemini_live", "browser_backup"] = "stt_stream"
     confidence: float | None = Field(default=None, ge=0.0, le=1.0)
 
 
@@ -498,6 +498,14 @@ class SessionStartRequest(BaseModel):
     environment: EnvironmentCheckRequest | None = None
 
 
+class RealtimeReadiness(BaseModel):
+    provider: str
+    ready: bool
+    mode: Literal["gemini_live", "openai_realtime", "browser_backup", "offline"]
+    status: str
+    detail: str | None = None
+
+
 class SessionStartResponse(BaseModel):
     session_id: str
     child_id: str
@@ -508,6 +516,7 @@ class SessionStartResponse(BaseModel):
     environment_ok: bool = True
     environment_note: str | None = None
     parent_message: str | None = None
+    realtime_readiness: RealtimeReadiness | None = None
 
 
 class SpeechInputRequest(BaseModel):

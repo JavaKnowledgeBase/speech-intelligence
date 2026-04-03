@@ -23,6 +23,8 @@ const S = {
 
 const PROMPT_ECHO_GUARD_MS = 160;
 const NO_PROMPT_ECHO_GUARD_MS = 60;
+const DEEPGRAM_RECONNECT_MS = 1500;
+const GEMINI_PROMOTION_DELAY_MS = 1800;
 
 const state = {
   sessionState: S.IDLE,
@@ -37,6 +39,9 @@ const state = {
   wakeLock: null,
   ttsBackend: false,
   deepgramWs: null,
+  deepgramPeerConnection: null,
+  deepgramDataChannel: null,
+  deepgramRemoteAudio: null,
   deepgramMicStream: null,
   deepgramAudioContext: null,
   deepgramSourceNode: null,
@@ -44,9 +49,18 @@ const state = {
   deepgramSink: null,
   deepgramReady: false,
   deepgramFinalPending: false,
+  deepgramReconnectTimer: null,
+  deepgramReconnectAttempts: 0,
+  deepgramPromotionTimer: null,
+  deepgramFinalizeTimer: null,
+  deepgramLastTranscript: "",
+  usingBrowserFallback: false,
+  exitingSession: false,
   turnCaptureEnabled: false,
   ttsActive: false,
   currentTarget: null,
+  embeddedHost: false,
+  initialized: false,
 };
 
 const el = {
@@ -274,6 +288,7 @@ function openTurnCapture(messageWasSpoken) {
   state.listenReadyAt = Date.now() + (messageWasSpoken ? PROMPT_ECHO_GUARD_MS : NO_PROMPT_ECHO_GUARD_MS);
   transitionTo(S.LISTENING);
   setMascot("listen");
+  el.mascotStatus.textContent = "Mic live";
   setMic("listening", "Mic live");
   el.interimDisplay.textContent = "";
 }
@@ -281,6 +296,62 @@ function openTurnCapture(messageWasSpoken) {
 function closeTurnCapture() {
   state.turnCaptureEnabled = false;
   state.deepgramFinalPending = false;
+}
+
+function clearDeepgramReconnectTimer() {
+  if (state.deepgramReconnectTimer) {
+    clearTimeout(state.deepgramReconnectTimer);
+    state.deepgramReconnectTimer = null;
+  }
+}
+
+function clearDeepgramPromotionTimer() {
+  if (state.deepgramPromotionTimer) {
+    clearTimeout(state.deepgramPromotionTimer);
+    state.deepgramPromotionTimer = null;
+  }
+}
+
+function canRecoverDeepgram() {
+  return !state.exitingSession && ![S.COMPLETED, S.ESCALATED].includes(state.sessionState);
+}
+
+function activateBrowserFallback(reason = "Mic switched to backup") {
+  clearDeepgramPromotionTimer();
+  state.usingBrowserFallback = true;
+  if (state.sessionState !== S.PROCESSING && state.sessionState !== S.COMPLETED && state.sessionState !== S.ESCALATED) {
+    el.mascotStatus.textContent = reason;
+  }
+  el.sttBadge.textContent = "STT: Browser Backup";
+  el.sttBadge.classList.remove("mock");
+  if (browserSpeechReady && !state.recognitionActive) {
+    startBrowserListening();
+  }
+}
+
+async function scheduleDeepgramReconnect() {
+  if (state.deepgramReady || state.deepgramReconnectTimer || !canRecoverDeepgram()) return;
+  state.deepgramReconnectTimer = setTimeout(async () => {
+    state.deepgramReconnectTimer = null;
+    if (!canRecoverDeepgram() || state.deepgramReady) return;
+    const restored = await tryInitDeepgramStream();
+    if (restored) {
+      state.usingBrowserFallback = false;
+      if (state.sessionState !== S.PROCESSING) {
+        el.mascotStatus.textContent = "Mic live";
+      }
+      ensureSessionMicLive();
+      return;
+    }
+    state.deepgramReconnectAttempts += 1;
+    scheduleDeepgramReconnect();
+  }, DEEPGRAM_RECONNECT_MS);
+}
+
+function handleDeepgramDisconnect(reason = "Mic disconnected. Using backup") {
+  Promise.resolve().then(() => closeDeepgram().catch(() => {}));
+  activateBrowserFallback(reason);
+  void scheduleDeepgramReconnect();
 }
 
 function startBrowserListening() {
@@ -363,7 +434,50 @@ function encodePcm16(channelData, inputSampleRate) {
   return pcm.buffer;
 }
 
+function extractRealtimeTranscript(event) {
+  const direct = event?.serverContent?.inputTranscription?.text || event?.inputTranscription?.text || event?.transcript;
+  if (typeof direct === "string" && direct.trim()) {
+    return direct.trim();
+  }
+  const content = event?.serverContent?.modelTurn?.parts || event?.item?.content;
+  if (Array.isArray(content)) {
+    for (const part of content) {
+      const candidate = part?.transcript || part?.text || part?.value;
+      if (typeof candidate === "string" && candidate.trim()) {
+        return candidate.trim();
+      }
+    }
+  }
+  return "";
+}
+
+function clearDeepgramFinalizeTimer() {
+  if (state.deepgramFinalizeTimer) {
+    clearTimeout(state.deepgramFinalizeTimer);
+    state.deepgramFinalizeTimer = null;
+  }
+}
+
+function scheduleDeepgramTranscriptCommit(transcript, immediate = false) {
+  state.deepgramLastTranscript = transcript;
+  clearDeepgramFinalizeTimer();
+  const delay = immediate ? 0 : 320;
+  state.deepgramFinalizeTimer = setTimeout(() => {
+    state.deepgramFinalizeTimer = null;
+    const finalTranscript = (state.deepgramLastTranscript || "").trim();
+    if (!finalTranscript) return;
+    if (state.sessionState !== S.LISTENING || state.deepgramFinalPending || !canAcceptTranscript()) {
+      return;
+    }
+    state.deepgramFinalPending = true;
+    void handleTranscript(finalTranscript, null, "gemini_live");
+  }, delay);
+}
+
 function cleanupDeepgramNodes() {
+  clearDeepgramPromotionTimer();
+  clearDeepgramFinalizeTimer();
+  state.deepgramLastTranscript = "";
   if (state.deepgramProcessor) {
     try { state.deepgramProcessor.disconnect(); } catch {}
   }
@@ -381,6 +495,7 @@ function cleanupDeepgramNodes() {
 async function closeDeepgram() {
   state.deepgramReady = false;
   state.deepgramFinalPending = false;
+  clearDeepgramReconnectTimer();
   cleanupDeepgramNodes();
   if (state.deepgramAudioContext) {
     try { await state.deepgramAudioContext.close(); } catch {}
@@ -390,6 +505,19 @@ async function closeDeepgram() {
     state.deepgramMicStream.getTracks().forEach((track) => track.stop());
   }
   state.deepgramMicStream = null;
+  if (state.deepgramDataChannel) {
+    try { state.deepgramDataChannel.close(); } catch {}
+  }
+  state.deepgramDataChannel = null;
+  if (state.deepgramPeerConnection) {
+    try { state.deepgramPeerConnection.close(); } catch {}
+  }
+  state.deepgramPeerConnection = null;
+  if (state.deepgramRemoteAudio) {
+    try { state.deepgramRemoteAudio.pause(); } catch {}
+    state.deepgramRemoteAudio.srcObject = null;
+  }
+  state.deepgramRemoteAudio = null;
   if (state.deepgramWs) {
     try { state.deepgramWs.close(); } catch {}
   }
@@ -401,7 +529,8 @@ async function tryInitDeepgramStream() {
 
   let micStream;
   try {
-    micStream = await navigator.mediaDevices.getUserMedia({
+    const hostMic = window.TalkBuddyMicManager;
+    micStream = await (hostMic?.acquire?.() || navigator.mediaDevices.getUserMedia({
       audio: {
         channelCount: 1,
         echoCancellation: true,
@@ -409,116 +538,143 @@ async function tryInitDeepgramStream() {
         autoGainControl: false,
       },
       video: false,
-    });
+    }));
   } catch {
     return false;
   }
 
-  const proto = location.protocol === "https:" ? "wss" : "ws";
-  const ws = new WebSocket(
-    `${proto}://${location.host}/runtime/voice/stream?session_id=${encodeURIComponent(state.sessionId)}&child_id=${encodeURIComponent(state.childId)}`
-  );
-  ws.binaryType = "arraybuffer";
+  let ws;
+  let audioContext;
+  let sourceNode;
+  let processorNode;
+  let sinkNode;
 
   try {
+    const params = new URLSearchParams({
+      session_id: state.sessionId,
+      child_id: state.childId,
+    });
+    const protocol = window.location.protocol === "https:" ? "wss:" : "ws:";
+    ws = new WebSocket(`${protocol}//${window.location.host}/runtime/voice/gemini/live?${params.toString()}`);
+    ws.binaryType = "arraybuffer";
+
     await new Promise((resolve, reject) => {
-      const timeout = setTimeout(() => reject(new Error("timeout")), 4000);
+      const timer = setTimeout(() => reject(new Error("Gemini Live connect timeout")), 10000);
       ws.onopen = () => {
-        clearTimeout(timeout);
+        clearTimeout(timer);
         resolve();
       };
       ws.onerror = () => {
-        clearTimeout(timeout);
-        reject(new Error("ws error"));
+        clearTimeout(timer);
+        reject(new Error("Gemini Live socket error"));
       };
-      ws.onclose = (event) => {
-        clearTimeout(timeout);
-        reject(new Error(`ws closed: ${event.code}`));
+      ws.onclose = () => {
+        clearTimeout(timer);
+        reject(new Error("Gemini Live socket closed"));
       };
     });
+
+    audioContext = new (window.AudioContext || window.webkitAudioContext)();
+    sourceNode = audioContext.createMediaStreamSource(micStream);
+    processorNode = audioContext.createScriptProcessor(4096, 1, 1);
+    sinkNode = audioContext.createGain();
+    sinkNode.gain.value = 0;
+
+    processorNode.onaudioprocess = (event) => {
+      if (!ws || ws.readyState !== WebSocket.OPEN) return;
+      const input = event.inputBuffer.getChannelData(0);
+      const pcmBuffer = encodePcm16(input, audioContext.sampleRate);
+      try {
+        ws.send(pcmBuffer);
+      } catch {}
+    };
+
+    sourceNode.connect(processorNode);
+    processorNode.connect(sinkNode);
+    sinkNode.connect(audioContext.destination);
+
+    ws.onmessage = (event) => {
+      try {
+        const payload = JSON.parse(event.data);
+        if (payload.error) {
+          handleDeepgramDisconnect("Live mic disconnected. Using backup");
+          return;
+        }
+        const transcript = extractRealtimeTranscript(payload);
+        if (transcript && canAcceptTranscript()) {
+          el.interimDisplay.textContent = transcript;
+          scheduleDeepgramTranscriptCommit(transcript, Boolean(payload.serverContent?.turnComplete));
+        }
+        if (payload.serverContent?.interrupted) {
+          clearDeepgramFinalizeTimer();
+        }
+      } catch {}
+    };
+
+    ws.onclose = () => {
+      handleDeepgramDisconnect("Live mic disconnected. Using backup");
+    };
+    ws.onerror = () => {
+      handleDeepgramDisconnect("Live mic disconnected. Using backup");
+    };
   } catch {
     micStream.getTracks().forEach((track) => track.stop());
+    try { if (processorNode) processorNode.disconnect(); } catch {}
+    try { if (sourceNode) sourceNode.disconnect(); } catch {}
+    try { if (sinkNode) sinkNode.disconnect(); } catch {}
+    try { if (audioContext) audioContext.close(); } catch {}
+    try { if (ws) ws.close(); } catch {}
     return false;
   }
 
-  const AudioContextCtor = window.AudioContext || window.webkitAudioContext;
-  if (!AudioContextCtor) {
-    micStream.getTracks().forEach((track) => track.stop());
-    ws.close();
-    return false;
-  }
-
-  const audioContext = new AudioContextCtor();
-  const source = audioContext.createMediaStreamSource(micStream);
-  const processor = audioContext.createScriptProcessor(2048, 1, 1);
-  const sink = audioContext.createGain();
-  sink.gain.value = 0;
-
-  processor.onaudioprocess = (event) => {
-    if (!state.deepgramWs || state.deepgramWs.readyState !== WebSocket.OPEN) return;
-    const pcmFrame = encodePcm16(event.inputBuffer.getChannelData(0), event.inputBuffer.sampleRate);
-    state.deepgramWs.send(pcmFrame);
-  };
-
-  source.connect(processor);
-  processor.connect(sink);
-  sink.connect(audioContext.destination);
-  await audioContext.resume().catch(() => {});
-
+  clearDeepgramReconnectTimer();
+  clearDeepgramPromotionTimer();
+  state.deepgramReconnectAttempts = 0;
   state.deepgramWs = ws;
+  state.deepgramDataChannel = null;
+  state.deepgramPeerConnection = null;
+  state.deepgramRemoteAudio = null;
   state.deepgramMicStream = micStream;
   state.deepgramAudioContext = audioContext;
-  state.deepgramSourceNode = source;
-  state.deepgramProcessor = processor;
-  state.deepgramSink = sink;
+  state.deepgramSourceNode = sourceNode;
+  state.deepgramProcessor = processorNode;
+  state.deepgramSink = sinkNode;
   state.deepgramReady = true;
   state.deepgramFinalPending = false;
-
-  el.sttBadge.textContent = "STT: Deepgram";
+  state.deepgramLastTranscript = "";
+  state.usingBrowserFallback = true;
+  el.sttBadge.textContent = "STT: Browser Backup";
   el.sttBadge.classList.remove("mock");
-
-  ws.onmessage = (event) => {
-    try {
-      const frame = JSON.parse(event.data);
-      if (!frame.transcript) return;
-      if (canAcceptTranscript()) {
-        el.interimDisplay.textContent = frame.transcript;
-      }
-      if (!(frame.is_final || frame.speech_final)) return;
-      if (state.sessionState !== S.LISTENING || state.deepgramFinalPending) return;
-      if (!canAcceptTranscript()) {
-        el.interimDisplay.textContent = "";
-        return;
-      }
-      state.deepgramFinalPending = true;
-      handleTranscript(frame.transcript, frame.confidence ?? null, "stt_stream");
-    } catch {}
-  };
-
-  ws.onclose = () => {
-    closeDeepgram().catch(() => {});
-    if (state.sessionState === S.LISTENING && browserSpeechReady) {
-      el.sttBadge.textContent = "STT: Browser";
-      el.sttBadge.classList.remove("mock");
-      startBrowserListening();
+  state.deepgramPromotionTimer = setTimeout(() => {
+    state.deepgramPromotionTimer = null;
+    if (!state.deepgramReady || state.exitingSession) return;
+    state.usingBrowserFallback = false;
+    if (state.sessionState !== S.PROCESSING && state.sessionState !== S.ESCALATED && state.sessionState !== S.COMPLETED) {
+      el.mascotStatus.textContent = "Mic live";
     }
-  };
-
+    el.sttBadge.textContent = "STT: Gemini Live";
+    el.sttBadge.classList.remove("mock");
+  }, GEMINI_PROMOTION_DELAY_MS);
   return true;
 }
 
 function ensureSessionMicLive() {
   if (state.deepgramReady) {
+    if (state.sessionState !== S.PROCESSING && state.sessionState !== S.ESCALATED && state.sessionState !== S.COMPLETED) {
+      el.mascotStatus.textContent = "Mic live";
+    }
+    el.sttBadge.textContent = "STT: Gemini Live";
+    el.sttBadge.classList.remove("mock");
     setMic(state.sessionState === S.LISTENING ? "listening" : "idle", "Mic live");
     return;
   }
-  if (browserSpeechReady && !state.recognitionActive) {
-    el.sttBadge.textContent = "STT: Browser";
-    el.sttBadge.classList.remove("mock");
-    startBrowserListening();
+  if (browserSpeechReady) {
+    activateBrowserFallback(state.sessionState === S.LISTENING ? "Mic switched to backup" : "Mic live (backup)");
+    setMic(state.sessionState === S.LISTENING ? "listening" : "idle", "Mic live");
     return;
   }
   el.sttBadge.textContent = "STT: Unavailable";
+  el.mascotStatus.textContent = "Mic unavailable";
 }
 
 function startListening() {
@@ -538,6 +694,7 @@ function stopListening() {
 async function coachAndListen(message) {
   transitionTo(S.COACHING);
   closeTurnCapture();
+  el.mascotStatus.textContent = message ? "Coach is speaking..." : "Mic live";
   setMic("idle", "Mic live");
   if (message) {
     showBubble(message);
@@ -661,9 +818,13 @@ function updateTarget(word, cue) {
   el.targetCue.textContent = cue || "";
 }
 
-async function init() {
+async function init(options = {}) {
+  if (state.initialized) return;
+  state.initialized = true;
+  state.embeddedHost = Boolean(options.embeddedHost);
   el.childName.textContent = state.childName;
   updateStars(0);
+  el.mascotStatus.textContent = "Mic live";
   setMic("idle", "Mic live");
   setMascot("idle");
   el.sttBadge.textContent = browserSpeechReady ? "STT: Browser Backup" : "STT: Connecting";
@@ -693,6 +854,13 @@ async function init() {
       return null;
     }
   })();
+  const realtimeReadiness = (() => {
+    try {
+      return JSON.parse(sessionStorage.getItem("tb_realtime_readiness") || "null");
+    } catch {
+      return null;
+    }
+  })();
 
   if (!state.sessionId || !state.childId) {
     el.mascotStatus.textContent = "No session found. Returning to welcome...";
@@ -714,16 +882,25 @@ async function init() {
     sessionStorage.removeItem("tb_session_id");
     sessionStorage.removeItem("tb_child_id");
     sessionStorage.removeItem("tb_session_data");
+  sessionStorage.removeItem("tb_realtime_readiness");
     el.mascotStatus.textContent = "Session expired. Returning to welcome...";
     await speak("Let me take you back to the start.");
     setTimeout(() => { window.location.href = "/"; }, 1500);
     return;
   }
 
-  const deepgramReady = await tryInitDeepgramStream();
-  if (!deepgramReady && browserSpeechReady) {
-    el.sttBadge.textContent = "STT: Browser";
-    el.sttBadge.classList.remove("mock");
+  activateBrowserFallback(realtimeReadiness?.detail || "Mic live (backup)");
+
+  const allowGeminiLive = realtimeReadiness?.ready && realtimeReadiness?.mode === "gemini_live";
+  if (allowGeminiLive) {
+    Promise.resolve().then(async () => {
+      const deepgramReady = await tryInitDeepgramStream();
+      if (!deepgramReady) {
+        void scheduleDeepgramReconnect();
+        return;
+      }
+      ensureSessionMicLive();
+    });
   }
 
   ensureSessionMicLive();
@@ -740,6 +917,27 @@ async function init() {
 }
 
 async function exitSession() {
+  if (state.embeddedHost) {
+    state.exitingSession = true;
+    closeTurnCapture();
+    stopListening();
+    releaseWakeLock();
+    await closeDeepgram().catch(() => {});
+    await completeSessionApi().catch(() => {});
+    sessionStorage.removeItem("tb_session_id");
+    sessionStorage.removeItem("tb_child_id");
+    sessionStorage.removeItem("tb_session_data");
+    sessionStorage.removeItem("tb_realtime_readiness");
+    state.initialized = false;
+    state.embeddedHost = false;
+    const childMode = document.getElementById("child-mode");
+    if (childMode) childMode.hidden = true;
+    const page = document.querySelector(".page");
+    if (page) page.hidden = false;
+    window.history.pushState({ view: "welcome" }, "", "/");
+    return;
+  }
+  state.exitingSession = true;
   closeTurnCapture();
   stopListening();
   releaseWakeLock();
@@ -748,6 +946,7 @@ async function exitSession() {
   sessionStorage.removeItem("tb_session_id");
   sessionStorage.removeItem("tb_child_id");
   sessionStorage.removeItem("tb_session_data");
+  sessionStorage.removeItem("tb_realtime_readiness");
   window.location.href = "/";
 }
 
@@ -766,14 +965,38 @@ el.startOverBtn.addEventListener("click", async () => {
   sessionStorage.removeItem("tb_session_id");
   sessionStorage.removeItem("tb_child_id");
   sessionStorage.removeItem("tb_session_data");
+  sessionStorage.removeItem("tb_realtime_readiness");
+  state.initialized = false;
+  if (state.embeddedHost) {
+    state.embeddedHost = false;
+    const childMode = document.getElementById("child-mode");
+    if (childMode) childMode.hidden = true;
+    const page = document.querySelector(".page");
+    if (page) page.hidden = false;
+    window.history.pushState({ view: "welcome" }, "", "/");
+    return;
+  }
   window.location.href = "/";
 });
 
 window.addEventListener("beforeunload", () => {
+  state.exitingSession = true;
   stopListening();
   closeDeepgram().catch(() => {});
 });
 
-init().catch(() => {
-  el.mascotStatus.textContent = "Failed to load. Please refresh.";
-});
+window.TalkBuddySessionApp = {
+  async startEmbeddedSession() {
+    state.sessionId = sessionStorage.getItem("tb_session_id");
+    state.childId = sessionStorage.getItem("tb_child_id");
+    state.childName = sessionStorage.getItem("tb_child_name") || state.childName;
+    state.exitingSession = false;
+    await init({ embeddedHost: true });
+  },
+};
+
+if (document.body && !document.getElementById("child-mode")?.hasAttribute("hidden")) {
+  init().catch(() => {
+    el.mascotStatus.textContent = "Failed to load. Please refresh.";
+  });
+}

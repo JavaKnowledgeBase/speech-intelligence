@@ -102,12 +102,43 @@ def _openai_score(expected: str, heard: str) -> float | None:
         return None
 
 
+def _canonical_child_attempt(text: str) -> str:
+    normalized = ''.join(ch for ch in text.lower().strip() if ch.isalpha() or ch.isspace())
+    if not normalized:
+        return ''
+    token = normalized.split()[0]
+    if len(token) <= 2:
+        return token
+    # Common browser-STT expansions of short CV practice sounds.
+    syllable_aliases = {
+        'pa': {'pa', 'pah', 'paw', 'pop', 'pot', 'pat', 'pow', 'power', 'papa'},
+        'ba': {'ba', 'bah', 'baa', 'bob', 'bad', 'bat', 'ball', 'baaah', 'baby'},
+        'ma': {'ma', 'mah', 'mom', 'mum', 'mama', 'map', 'man'},
+        'me': {'me', 'mee', 'mi', 'my', 'may'},
+    }
+    for canonical, variants in syllable_aliases.items():
+        if token in variants:
+            return canonical
+    # Collapse longer words to a child-practice style CV prefix when possible.
+    if len(token) >= 2 and token[0].isalpha():
+        vowels = 'aeiou'
+        prefix = token[0]
+        for ch in token[1:]:
+            prefix += ch
+            if ch in vowels:
+                break
+        return prefix[:2]
+    return token[:2]
+
+
 class SpeechExpert:
     provider_name = "Deepgram Nova / Flux"
 
     def evaluate(self, expected_text: str, transcript: str) -> tuple[float, ExpertDecision]:
         expected = expected_text.strip().lower()
         heard = transcript.strip().lower()
+        canonical_expected = _canonical_child_attempt(expected)
+        canonical_heard = _canonical_child_attempt(heard)
 
         # Try OpenAI scoring first (better phoneme awareness)
         ai_score = _openai_score(expected, heard)
@@ -122,25 +153,34 @@ class SpeechExpert:
                 summary=summary,
             )
 
-        # Local fallback: character similarity + phonetic key match
-        char_sim = _char_similarity(expected, heard)
-        phonetic_match = _phonetic_key(expected) == _phonetic_key(heard)
-
-        if heard == expected:
-            score = 0.96
-            summary = f"Exact lexical match for target '{expected_text}'."
-        elif char_sim >= 0.85 or phonetic_match:
-            score = round(0.7 + (char_sim * 0.25), 2)
-            summary = f"Strong phonetic match for '{expected_text}' (char sim {char_sim:.2f}, phonetic {'✓' if phonetic_match else '✗'})."
-        elif char_sim >= 0.55 or (heard and expected and heard[0] == expected[0]):
-            score = round(0.45 + (char_sim * 0.3), 2)
-            summary = f"Partial match for '{expected_text}' (char sim {char_sim:.2f})."
-        elif heard:
-            score = round(max(0.1, char_sim * 0.5), 2)
-            summary = f"Weak alignment with target '{expected_text}' (char sim {char_sim:.2f})."
+        if canonical_expected and canonical_heard and canonical_expected == canonical_heard:
+            score = 0.94
+            summary = (
+                f"Canonical child-syllable match for '{expected_text}' "
+                f"(heard '{transcript}', normalized to '{canonical_heard}')."
+            )
         else:
-            score = 0.0
-            summary = f"No speech detected for target '{expected_text}'."
+            char_sim = _char_similarity(expected, heard)
+            phonetic_match = _phonetic_key(expected) == _phonetic_key(heard)
+
+            if heard == expected:
+                score = 0.96
+                summary = f"Exact lexical match for target '{expected_text}'."
+            elif char_sim >= 0.85 or phonetic_match:
+                score = round(0.7 + (char_sim * 0.25), 2)
+                summary = (
+                    f"Strong phonetic match for '{expected_text}' "
+                    f"(char sim {char_sim:.2f}, phonetic {'yes' if phonetic_match else 'no'})."
+                )
+            elif char_sim >= 0.55 or (heard and expected and heard[0] == expected[0]):
+                score = round(0.45 + (char_sim * 0.3), 2)
+                summary = f"Partial match for '{expected_text}' (char sim {char_sim:.2f})."
+            elif heard:
+                score = round(max(0.1, char_sim * 0.5), 2)
+                summary = f"Weak alignment with target '{expected_text}' (char sim {char_sim:.2f})."
+            else:
+                score = 0.0
+                summary = f"No speech detected for target '{expected_text}'."
 
         return score, ExpertDecision(
             expert="speech_scoring_expert",

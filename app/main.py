@@ -1,10 +1,12 @@
 from __future__ import annotations
 
+import asyncio
+import base64
 import json
 from contextlib import asynccontextmanager
 from pathlib import Path
 
-from fastapi import FastAPI, HTTPException, Query, WebSocket, WebSocketDisconnect
+from fastapi import FastAPI, HTTPException, Query, Request, WebSocket, WebSocketDisconnect
 from fastapi.responses import FileResponse, StreamingResponse
 from fastapi.staticfiles import StaticFiles
 
@@ -71,6 +73,7 @@ from app.models import (
     WorkflowQueueSnapshot,
 )
 from app.runtime import runtime_manager
+from app.audio_runtime import audio_runtime
 from app.workflows import workflow_manager
 
 STATIC_DIR = Path(__file__).with_name("static")
@@ -79,6 +82,12 @@ STATIC_DIR = Path(__file__).with_name("static")
 @asynccontextmanager
 async def lifespan(application: FastAPI):
     """Hydrate runtime state from Supabase on startup when configured."""
+    from app.config import settings
+
+    audio_runtime.start()
+    audio_runtime.register_provider("openai", settings.configured(settings.openai_api_key))
+    audio_runtime.register_provider("gemini", settings.configured(settings.google_api_key))
+    audio_runtime.register_provider("deepgram", settings.configured(settings.deepgram_api_key))
     if db.enabled():
         for child_id in list(store.children.keys()):
             progress = persistence.load_progress_for_child(child_id)
@@ -96,6 +105,7 @@ async def lifespan(application: FastAPI):
             review.review_id: review for review in persistence.load_reviews()
         }
     yield
+    audio_runtime.stop()
 
 
 app = FastAPI(
@@ -166,10 +176,12 @@ def health() -> dict:
         "env": settings.app_env,
         "live_providers": settings.use_live_provider_calls,
         "openai_configured": settings.configured(settings.openai_api_key),
+        "gemini_configured": settings.configured(settings.google_api_key),
         "deepgram_configured": settings.configured(settings.deepgram_api_key),
         "livekit_configured": settings.livekit_configured,
         "supabase_enabled": settings.supabase_configured,
         "auth_required": settings.configured(settings.clerk_secret_key),
+        "audio_runtime": audio_runtime.snapshot(),
     }
 
 
@@ -212,6 +224,187 @@ async def tts_speak(
         media_type="audio/mpeg",
         headers={"Cache-Control": "no-store", "X-Session-Id": session_id or ""},
     )
+
+
+@app.websocket("/runtime/voice/gemini/live")
+async def gemini_live_stream(
+    websocket: WebSocket,
+    session_id: str = Query(...),
+    child_id: str = Query(...),
+) -> None:
+    """WebSocket bridge: browser audio -> Gemini Live -> transcript frames."""
+    from app.config import settings
+
+    if store.sessions.get(session_id) is None or store.children.get(child_id) is None:
+        await websocket.close(code=4404, reason="Session or child not found")
+        return
+
+    if not settings.use_live_provider_calls or not settings.configured(settings.google_api_key):
+        await websocket.accept()
+        await websocket.close(code=4503, reason="Gemini Live not configured")
+        return
+
+    await websocket.accept()
+
+    child = store.children[child_id]
+    setup_message = {
+        "setup": {
+            "model": "models/gemini-3.1-flash-live-preview",
+            "generationConfig": {
+                "responseModalities": ["TEXT"],
+                "temperature": 0,
+                "maxOutputTokens": 1,
+            },
+            "systemInstruction": {
+                "parts": [
+                    {
+                        "text": (
+                            "This is a child speech practice session. Favor short child word attempts such as pa, ba, ma, cat, and ball. "
+                            "Do not coach or converse. Only support live speech transcription."
+                        )
+                    }
+                ]
+            },
+            "inputAudioTranscription": {},
+            "realtimeInputConfig": {
+                "automaticActivityDetection": {
+                    "disabled": False,
+                    "prefixPaddingMs": 120,
+                    "silenceDurationMs": 250,
+                }
+            },
+        }
+    }
+
+    gemini_url = (
+        "wss://generativelanguage.googleapis.com/ws/"
+        "google.ai.generativelanguage.v1beta.GenerativeService.BidiGenerateContent"
+        f"?key={settings.google_api_key}"
+    )
+
+    try:
+        import websockets as _ws_lib  # type: ignore[import]
+
+        async with _ws_lib.connect(gemini_url, open_timeout=15, close_timeout=5, max_size=2**22) as gemini_ws:
+            await gemini_ws.send(json.dumps(setup_message))
+
+            try:
+                setup_raw = await asyncio.wait_for(gemini_ws.recv(), timeout=10)
+            except TimeoutError as exc:
+                await websocket.close(code=4510, reason="Gemini setup timeout")
+                raise exc
+
+            await websocket.send_text(setup_raw if isinstance(setup_raw, str) else setup_raw.decode("utf-8", errors="ignore"))
+
+            async def forward_audio() -> None:
+                while True:
+                    message = await websocket.receive()
+                    if message.get("type") == "websocket.disconnect":
+                        break
+                    audio_bytes = message.get("bytes")
+                    if not audio_bytes:
+                        continue
+                    await gemini_ws.send(
+                        json.dumps(
+                            {
+                                "realtimeInput": {
+                                    "audio": {
+                                        "data": base64.b64encode(audio_bytes).decode("ascii"),
+                                        "mimeType": "audio/pcm;rate=16000",
+                                    }
+                                }
+                            }
+                        )
+                    )
+
+            async def relay_events() -> None:
+                async for incoming in gemini_ws:
+                    payload = incoming if isinstance(incoming, str) else incoming.decode("utf-8", errors="ignore")
+                    await websocket.send_text(payload)
+
+            await asyncio.gather(forward_audio(), relay_events())
+
+    except WebSocketDisconnect:
+        pass
+    except Exception as exc:
+        try:
+            if websocket.client_state.name == "CONNECTED":
+                await websocket.send_json({"error": {"message": str(exc)[:300] or "Gemini Live connection failed"}})
+                await websocket.close(code=4511, reason="Gemini Live connection failed")
+        except Exception:
+            pass
+
+
+@app.post("/runtime/voice/openai/realtime/call")
+async def create_openai_realtime_call(
+    request: Request,
+    session_id: str = Query(...),
+    child_id: str = Query(...),
+) -> StreamingResponse:
+    from app.config import settings
+
+    if session_id not in store.sessions:
+        raise HTTPException(status_code=404, detail="Session not found")
+    if child_id not in store.children:
+        raise HTTPException(status_code=404, detail="Child not found")
+    if not settings.use_live_provider_calls or not settings.configured(settings.openai_api_key):
+        raise HTTPException(status_code=503, detail="OpenAI Realtime not configured")
+
+    sdp = (await request.body()).decode("utf-8", errors="ignore").strip()
+    if not sdp:
+        raise HTTPException(status_code=400, detail="Missing SDP offer")
+
+    child = store.children[child_id]
+    session_config = {
+        "type": "realtime",
+        "model": "gpt-realtime",
+        "instructions": (
+            "This is a child speech practice session. Listen quietly, use short turns, and do not speak first. "
+            "Transcription should favor short child word attempts such as pa, ba, ma, cat, ball, and similar practice words."
+        ),
+        "audio": {
+            "input": {
+                "noise_reduction": {"type": "far_field"},
+                "transcription": {
+                    "model": "gpt-4o-transcribe",
+                    "language": "en",
+                    "prompt": (
+                        f"Child speaker: {child.name}. Expect short child speech therapy practice attempts and single words."
+                    ),
+                },
+                "turn_detection": {
+                    "type": "server_vad",
+                    "create_response": False,
+                    "interrupt_response": False,
+                    "prefix_padding_ms": 200,
+                    "silence_duration_ms": 300,
+                },
+            },
+            "output": {"voice": "alloy"},
+        },
+    }
+
+    async with httpx.AsyncClient(timeout=30.0) as client:
+        response = await client.post(
+            "https://api.openai.com/v1/realtime/calls",
+            headers={
+                "Authorization": f"Bearer {settings.openai_api_key}",
+            },
+            files={
+                "sdp": (None, sdp),
+                "session": (None, json.dumps(session_config), "application/json"),
+            },
+        )
+
+    if response.status_code >= 400:
+        detail = response.text[:600] or "OpenAI Realtime call failed"
+        raise HTTPException(status_code=502, detail=detail)
+
+    answer_sdp = response.text
+    if not answer_sdp.strip():
+        raise HTTPException(status_code=502, detail="OpenAI Realtime returned no SDP answer")
+
+    return StreamingResponse(iter([answer_sdp.encode("utf-8")]), media_type="application/sdp")
 
 
 @app.websocket("/runtime/voice/stream")
