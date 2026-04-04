@@ -766,6 +766,7 @@ async function coachAndListen(message) {
   }
   if (state.sessionState !== S.COACHING) return;
   openTurnCapture(Boolean(message));
+  startListening();
 }
 
 async function handleTranscript(transcript, confidence = null, source = "stt_stream") {
