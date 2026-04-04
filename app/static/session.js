@@ -57,6 +57,9 @@ const state = {
   usingBrowserFallback: false,
   exitingSession: false,
   turnCaptureEnabled: false,
+  listenTimeoutTimer: null,
+  browserInterimTimer: null,
+  browserLastInterim: "",
   ttsActive: false,
   currentTarget: null,
   embeddedHost: false,
@@ -288,17 +291,45 @@ function canAcceptTranscript() {
 function openTurnCapture(messageWasSpoken) {
   state.turnCaptureEnabled = true;
   state.deepgramFinalPending = false;
+  state.browserLastInterim = "";
   state.listenReadyAt = Date.now() + (messageWasSpoken ? PROMPT_ECHO_GUARD_MS : NO_PROMPT_ECHO_GUARD_MS);
   transitionTo(S.LISTENING);
   setMascot("listen");
   el.mascotStatus.textContent = "Mic live";
   setMic("listening", "Mic live");
   el.interimDisplay.textContent = "";
+
+  // Hard 10-second cap: if still listening, commit any pending interim or re-prompt
+  state.listenTimeoutTimer = setTimeout(() => {
+    state.listenTimeoutTimer = null;
+    if (state.sessionState !== S.LISTENING) return;
+    const pending = state.browserLastInterim.trim();
+    if (pending && canAcceptTranscript()) {
+      state.browserLastInterim = "";
+      if (state.browserInterimTimer) { clearTimeout(state.browserInterimTimer); state.browserInterimTimer = null; }
+      state.recognitionActive = false;
+      try { state.recognition?.abort(); } catch {}
+      void handleTranscript(pending, null, "stt_stream");
+      return;
+    }
+    // No speech heard — gentle re-prompt
+    closeTurnCapture();
+    void coachAndListen(`Let's try again. Can you say ${state.currentTarget}?`);
+  }, 10000);
 }
 
 function closeTurnCapture() {
   state.turnCaptureEnabled = false;
   state.deepgramFinalPending = false;
+  if (state.listenTimeoutTimer) {
+    clearTimeout(state.listenTimeoutTimer);
+    state.listenTimeoutTimer = null;
+  }
+  if (state.browserInterimTimer) {
+    clearTimeout(state.browserInterimTimer);
+    state.browserInterimTimer = null;
+  }
+  state.browserLastInterim = "";
 }
 
 function clearDeepgramReconnectTimer() {
@@ -371,13 +402,31 @@ function startBrowserListening() {
     const results = Array.from(event.results);
     const transcript = results.map((result) => result[0].transcript).join("");
     el.interimDisplay.textContent = transcript;
-    if (!results[results.length - 1].isFinal || state.sessionState !== S.LISTENING) return;
-    if (!canAcceptTranscript()) {
-      el.interimDisplay.textContent = "";
-      return;
+    if (state.sessionState !== S.LISTENING) return;
+
+    const isFinal = results[results.length - 1].isFinal;
+
+    if (isFinal) {
+      // Clear pending interim timer — we have the real final result
+      if (state.browserInterimTimer) { clearTimeout(state.browserInterimTimer); state.browserInterimTimer = null; }
+      state.browserLastInterim = "";
+      if (!canAcceptTranscript()) { el.interimDisplay.textContent = ""; return; }
+      state.recognitionActive = false;
+      handleTranscript(transcript, null, "stt_stream");
+    } else if (transcript.trim()) {
+      // Short sounds like "ma" may never reach isFinal — debounce-commit after 2s
+      state.browserLastInterim = transcript;
+      if (state.browserInterimTimer) clearTimeout(state.browserInterimTimer);
+      state.browserInterimTimer = setTimeout(() => {
+        state.browserInterimTimer = null;
+        const pending = state.browserLastInterim.trim();
+        state.browserLastInterim = "";
+        if (!pending || state.sessionState !== S.LISTENING || !canAcceptTranscript()) return;
+        state.recognitionActive = false;
+        try { state.recognition?.abort(); } catch {}
+        handleTranscript(pending, null, "stt_stream");
+      }, 2000);
     }
-    state.recognitionActive = false;
-    handleTranscript(transcript, null, "stt_stream");
   };
 
   state.recognition.onerror = (event) => {
