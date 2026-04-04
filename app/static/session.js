@@ -1,4 +1,4 @@
-"use strict";
+﻿"use strict";
 
 let cachedVoices = [];
 if ("speechSynthesis" in window) {
@@ -61,35 +61,38 @@ const state = {
   currentTarget: null,
   embeddedHost: false,
   initialized: false,
+  pendingSessionData: null,
 };
 
+const root = document.getElementById("session-screen") || document;
+const pick = (id) => root.querySelector(`#${id}`);
 const el = {
-  childName: document.getElementById("session-child-name"),
-  starsDisplay: document.getElementById("stars-display"),
-  sttBadge: document.getElementById("stt-badge"),
-  ttsBadge: document.getElementById("tts-badge"),
-  endSessionBtn: document.getElementById("end-session-btn"),
-  mascot: document.getElementById("mascot"),
-  mascotBubble: document.getElementById("mascot-bubble"),
-  mascotBubbleText: document.getElementById("mascot-bubble-text"),
-  mascotStatus: document.getElementById("mascot-status"),
-  targetCard: document.getElementById("target-card"),
-  targetIcon: document.getElementById("target-icon"),
-  targetWord: document.getElementById("target-word"),
-  targetCue: document.getElementById("target-cue"),
-  micRing: document.getElementById("mic-ring"),
-  micLabel: document.getElementById("mic-label"),
-  interimDisplay: document.getElementById("interim-display"),
-  celebrationOverlay: document.getElementById("celebration-overlay"),
-  celebrationEmoji: document.getElementById("celebration-emoji"),
-  celebrationTitle: document.getElementById("celebration-title"),
-  celebrationSub: document.getElementById("celebration-sub"),
-  helpOverlay: document.getElementById("help-overlay"),
-  helpMessage: document.getElementById("help-message"),
-  dismissHelpBtn: document.getElementById("dismiss-help-btn"),
-  completedOverlay: document.getElementById("completed-overlay"),
-  completedSub: document.getElementById("completed-sub"),
-  startOverBtn: document.getElementById("start-over-btn"),
+  childName: pick("session-child-name"),
+  starsDisplay: pick("stars-display"),
+  sttBadge: pick("stt-badge"),
+  ttsBadge: pick("tts-badge"),
+  endSessionBtn: pick("end-session-btn"),
+  mascot: pick("mascot"),
+  mascotBubble: pick("mascot-bubble"),
+  mascotBubbleText: pick("mascot-bubble-text"),
+  mascotStatus: pick("mascot-status"),
+  targetCard: pick("target-card"),
+  targetIcon: pick("target-icon"),
+  targetWord: pick("target-word"),
+  targetCue: pick("target-cue"),
+  micRing: pick("mic-ring"),
+  micLabel: pick("mic-label"),
+  interimDisplay: pick("interim-display"),
+  celebrationOverlay: pick("celebration-overlay"),
+  celebrationEmoji: pick("celebration-emoji"),
+  celebrationTitle: pick("celebration-title"),
+  celebrationSub: pick("celebration-sub"),
+  helpOverlay: pick("help-overlay"),
+  helpMessage: pick("help-message"),
+  dismissHelpBtn: pick("dismiss-help-btn"),
+  completedOverlay: pick("completed-overlay"),
+  completedSub: pick("completed-sub"),
+  startOverBtn: pick("start-over-btn"),
 };
 
 const TARGET_ICONS = {
@@ -316,13 +319,13 @@ function canRecoverDeepgram() {
   return !state.exitingSession && ![S.COMPLETED, S.ESCALATED].includes(state.sessionState);
 }
 
-function activateBrowserFallback(reason = "Mic switched to backup") {
+function activateBrowserFallback(reason = "Mic live") {
   clearDeepgramPromotionTimer();
   state.usingBrowserFallback = true;
   if (state.sessionState !== S.PROCESSING && state.sessionState !== S.COMPLETED && state.sessionState !== S.ESCALATED) {
     el.mascotStatus.textContent = reason;
   }
-  el.sttBadge.textContent = "STT: Browser Backup";
+  el.sttBadge.textContent = "STT: Browser Mic";
   el.sttBadge.classList.remove("mock");
   if (browserSpeechReady && !state.recognitionActive) {
     startBrowserListening();
@@ -502,7 +505,12 @@ async function closeDeepgram() {
   }
   state.deepgramAudioContext = null;
   if (state.deepgramMicStream) {
-    state.deepgramMicStream.getTracks().forEach((track) => track.stop());
+    const mgr = window.TalkBuddyMicManager;
+    if (mgr && state.deepgramMicStream === mgr.stream) {
+      mgr.release();
+    } else {
+      state.deepgramMicStream.getTracks().forEach((track) => track.stop());
+    }
   }
   state.deepgramMicStream = null;
   if (state.deepgramDataChannel) {
@@ -618,7 +626,12 @@ async function tryInitDeepgramStream() {
       handleDeepgramDisconnect("Live mic disconnected. Using backup");
     };
   } catch {
-    micStream.getTracks().forEach((track) => track.stop());
+    const mgr = window.TalkBuddyMicManager;
+    if (mgr && micStream === mgr.stream) {
+      mgr.release();
+    } else {
+      micStream.getTracks().forEach((track) => track.stop());
+    }
     try { if (processorNode) processorNode.disconnect(); } catch {}
     try { if (sourceNode) sourceNode.disconnect(); } catch {}
     try { if (sinkNode) sinkNode.disconnect(); } catch {}
@@ -643,7 +656,7 @@ async function tryInitDeepgramStream() {
   state.deepgramFinalPending = false;
   state.deepgramLastTranscript = "";
   state.usingBrowserFallback = true;
-  el.sttBadge.textContent = "STT: Browser Backup";
+  el.sttBadge.textContent = "STT: Browser Mic";
   el.sttBadge.classList.remove("mock");
   state.deepgramPromotionTimer = setTimeout(() => {
     state.deepgramPromotionTimer = null;
@@ -669,7 +682,7 @@ function ensureSessionMicLive() {
     return;
   }
   if (browserSpeechReady) {
-    activateBrowserFallback(state.sessionState === S.LISTENING ? "Mic switched to backup" : "Mic live (backup)");
+    activateBrowserFallback("Mic live");
     setMic(state.sessionState === S.LISTENING ? "listening" : "idle", "Mic live");
     return;
   }
@@ -818,6 +831,26 @@ function updateTarget(word, cue) {
   el.targetCue.textContent = cue || "";
 }
 
+function returnToWelcome() {
+  if (state.embeddedHost) {
+    const childMode = document.getElementById("child-mode");
+    if (childMode) childMode.hidden = true;
+    const page = document.querySelector(".page");
+    if (page) page.hidden = false;
+    window.history.pushState({ view: "welcome" }, "", "/");
+    return;
+  }
+  window.location.href = "/";
+}
+
+async function beginSessionTurn(sessionData) {
+  if (!sessionData) return;
+  state.pendingSessionData = null;
+  updateTarget(sessionData.target_text, sessionData.cue);
+  await postCheckpoint("turn_started", 0, "session opened from welcome");
+  await coachAndListen(`Hi ${state.childName}! Can you say ${sessionData.target_text}?`);
+}
+
 async function init(options = {}) {
   if (state.initialized) return;
   state.initialized = true;
@@ -827,7 +860,7 @@ async function init(options = {}) {
   el.mascotStatus.textContent = "Mic live";
   setMic("idle", "Mic live");
   setMascot("idle");
-  el.sttBadge.textContent = browserSpeechReady ? "STT: Browser Backup" : "STT: Connecting";
+  el.sttBadge.textContent = browserSpeechReady ? "STT: Browser Mic" : "STT: Connecting";
 
   await requestWakeLock();
 
@@ -865,7 +898,7 @@ async function init(options = {}) {
   if (!state.sessionId || !state.childId) {
     el.mascotStatus.textContent = "No session found. Returning to welcome...";
     await speak("Let me take you back to the start.");
-    setTimeout(() => { window.location.href = "/"; }, 1500);
+    setTimeout(() => { returnToWelcome(); }, 1500);
     return;
   }
 
@@ -882,16 +915,37 @@ async function init(options = {}) {
     sessionStorage.removeItem("tb_session_id");
     sessionStorage.removeItem("tb_child_id");
     sessionStorage.removeItem("tb_session_data");
-  sessionStorage.removeItem("tb_realtime_readiness");
+    sessionStorage.removeItem("tb_realtime_readiness");
     el.mascotStatus.textContent = "Session expired. Returning to welcome...";
     await speak("Let me take you back to the start.");
-    setTimeout(() => { window.location.href = "/"; }, 1500);
+    setTimeout(() => { returnToWelcome(); }, 1500);
     return;
   }
 
-  activateBrowserFallback(realtimeReadiness?.detail || "Mic live (backup)");
-
   const allowGeminiLive = realtimeReadiness?.ready && realtimeReadiness?.mode === "gemini_live";
+
+  if (options.preloadOnly) {
+    // During preload: connect Gemini Live in background but keep audio suspended
+    // so the main thread is free during the welcome→session transition.
+    // Browser STT is intentionally NOT started here — it starts when the session
+    // panel is revealed (startEmbeddedSession without preloadOnly).
+    if (allowGeminiLive) {
+      Promise.resolve().then(async () => {
+        const deepgramReady = await tryInitDeepgramStream();
+        if (deepgramReady && state.deepgramAudioContext) {
+          // Suspend audio processing until the session panel is visible
+          state.deepgramAudioContext.suspend().catch(() => {});
+        }
+      });
+    }
+    if (sessionData) {
+      state.pendingSessionData = sessionData;
+      updateTarget(sessionData.target_text, sessionData.cue);
+    }
+    return;
+  }
+
+  // Non-preload path: activate mic immediately
   if (allowGeminiLive) {
     Promise.resolve().then(async () => {
       const deepgramReady = await tryInitDeepgramStream();
@@ -903,17 +957,16 @@ async function init(options = {}) {
     });
   }
 
+  activateBrowserFallback("Mic live");
   ensureSessionMicLive();
 
   if (sessionData) {
-    updateTarget(sessionData.target_text, sessionData.cue);
-    await postCheckpoint("turn_started", 0, "session opened from welcome");
-    await coachAndListen(`Hi ${state.childName}! Can you say ${sessionData.target_text}?`);
+    await beginSessionTurn(sessionData);
     return;
   }
 
   el.mascotStatus.textContent = "Could not load session. Returning to welcome...";
-  setTimeout(() => { window.location.href = "/"; }, 2000);
+  setTimeout(() => { returnToWelcome(); }, 2000);
 }
 
 async function exitSession() {
@@ -947,7 +1000,7 @@ async function exitSession() {
   sessionStorage.removeItem("tb_child_id");
   sessionStorage.removeItem("tb_session_data");
   sessionStorage.removeItem("tb_realtime_readiness");
-  window.location.href = "/";
+  returnToWelcome();
 }
 
 el.endSessionBtn.addEventListener("click", () => {
@@ -976,7 +1029,7 @@ el.startOverBtn.addEventListener("click", async () => {
     window.history.pushState({ view: "welcome" }, "", "/");
     return;
   }
-  window.location.href = "/";
+  returnToWelcome();
 });
 
 window.addEventListener("beforeunload", () => {
@@ -986,12 +1039,25 @@ window.addEventListener("beforeunload", () => {
 });
 
 window.TalkBuddySessionApp = {
-  async startEmbeddedSession() {
+  async startEmbeddedSession(options = {}) {
     state.sessionId = sessionStorage.getItem("tb_session_id");
     state.childId = sessionStorage.getItem("tb_child_id");
     state.childName = sessionStorage.getItem("tb_child_name") || state.childName;
     state.exitingSession = false;
-    await init({ embeddedHost: true });
+    if (!state.initialized) {
+      await init({ embeddedHost: true, preloadOnly: Boolean(options.preloadOnly) });
+      return;
+    }
+    if (!options.preloadOnly && state.pendingSessionData) {
+      // Resume AudioContext if it was suspended during preload
+      if (state.deepgramAudioContext?.state === "suspended") {
+        state.deepgramAudioContext.resume().catch(() => {});
+      }
+      // Start browser STT fallback now that the session panel is visible
+      activateBrowserFallback("Mic live");
+      ensureSessionMicLive();
+      await beginSessionTurn(state.pendingSessionData);
+    }
   },
 };
 
@@ -1000,3 +1066,7 @@ if (document.body && !document.getElementById("child-mode")?.hasAttribute("hidde
     el.mascotStatus.textContent = "Failed to load. Please refresh.";
   });
 }
+
+
+
+

@@ -1,0 +1,33 @@
+# Python
+__pycache__/
+*.py[cod]
+*.egg-info/
+.eggs/
+dist/
+build/
+.venv/
+venv/
+
+# Tests (not needed in the image)
+tests/
+
+# Dev / CI artefacts
+.env
+.env.*
+!.env.example
+*.log
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+
+# Docs and notes (not needed at runtime)
+docs/
+notes/
+scripts/
+*.pdf
+*.md
+!requirements.txt
+
+# Git
+.git/
+.gitignore

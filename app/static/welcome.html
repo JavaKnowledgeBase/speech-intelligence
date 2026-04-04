@@ -1,11 +1,12 @@
-<!DOCTYPE html>
+﻿<!DOCTYPE html>
 <html lang="en">
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no, viewport-fit=cover" />
   <meta name="apple-mobile-web-app-capable" content="yes" />
   <meta name="theme-color" content="#0f766e" />
-  <title>TalkBuddy — Welcome</title>
+  <title>TalkBuddy â€” Welcome</title>
+  <link rel="stylesheet" href="/static/therapy.css" />
   <style>
     :root {
       --teal:      #0f766e;
@@ -28,7 +29,7 @@
       -webkit-tap-highlight-color: transparent;
       user-select: none;
     }
-    /* ── layout ── */
+    /* â”€â”€ layout â”€â”€ */
     .page {
       height: 100%; display: flex; align-items: center; justify-content: center;
       padding: 20px;
@@ -48,7 +49,7 @@
       0%,100% { box-shadow: var(--shadow); }
       50%      { box-shadow: 0 8px 60px rgba(15,118,110,0.30), var(--shadow); }
     }
-    /* ── lips SVG ── */
+    /* â”€â”€ lips SVG â”€â”€ */
     .lips-wrap {
       width: clamp(180px, 36vw, 280px);
       filter: drop-shadow(0 6px 18px rgba(208,64,96,0.25));
@@ -69,7 +70,7 @@
       0%,100% { transform: scale(1); }
       50%      { transform: scale(1.07); }
     }
-    /* ── step pills ── */
+    /* â”€â”€ step pills â”€â”€ */
     .steps { display: flex; gap: 10px; flex-wrap: wrap; justify-content: center; }
     .step {
       font-size: 0.72rem; font-weight: 700; letter-spacing: 0.1em;
@@ -77,12 +78,12 @@
       background: #e2e8f0; color: var(--muted); transition: background 300ms, color 300ms;
     }
     .step.active { background: var(--teal); color: #fff; }
-    /* ── prompt ── */
+    /* â”€â”€ prompt â”€â”€ */
     .prompt {
       font-size: clamp(1.1rem, 3.5vw, 1.7rem); font-weight: 700;
       color: var(--ink); text-align: center; line-height: 1.35; max-width: 500px;
     }
-    /* ── spelled name display ── */
+    /* â”€â”€ spelled name display â”€â”€ */
     .name-display {
       background: var(--teal-lt); border: 3px solid var(--teal);
       border-radius: 24px; padding: 16px 28px; width: 100%; text-align: center;
@@ -91,14 +92,14 @@
       font-size: clamp(2.5rem, 9vw, 5.5rem); font-weight: 900;
       color: var(--teal-dark); letter-spacing: 0.14em; word-break: break-all;
     }
-    /* ── interim heard text ── */
+    /* â”€â”€ interim heard text â”€â”€ */
     .interim {
       font-size: 1rem; color: var(--teal-dark); font-style: italic;
       min-height: 1.5em; text-align: center; width: 100%; max-width: 440px;
       background: rgba(255,255,255,0.7); padding: 6px 18px; border-radius: 12px;
       border: 1px solid rgba(0,0,0,0.08);
     }
-    /* ── mic ring ── */
+    /* â”€â”€ mic ring â”€â”€ */
     .mic-wrap { display: flex; flex-direction: column; align-items: center; gap: 10px; }
     .mic-ring {
       width: 80px; height: 80px; border-radius: 50%;
@@ -113,7 +114,7 @@
       70%  { box-shadow: 0 0 0 36px rgba(15,118,110,0); }
       100% { box-shadow: 0 0 0 0   rgba(15,118,110,0); }
     }
-    /* ── yes/no ── */
+    /* â”€â”€ yes/no â”€â”€ */
     .yn-row { display: flex; gap: 16px; width: 100%; justify-content: center; flex-wrap: wrap; }
     .yn-btn {
       flex: 1; max-width: 240px; min-height: 72px; border: none; border-radius: 999px;
@@ -125,7 +126,7 @@
     .yn-btn:active { transform: scale(0.97); }
     .yn-yes { background: linear-gradient(135deg, #16a34a, #15803d); color: #fff; box-shadow: 0 8px 24px rgba(21,128,61,0.28); }
     .yn-no  { background: linear-gradient(135deg, #dc2626, #b91c1c); color: #fff; box-shadow: 0 8px 24px rgba(185,28,28,0.26); }
-    /* ── role selection (final step) ── */
+    /* â”€â”€ role selection (final step) â”€â”€ */
     .role-row { display: flex; gap: 16px; width: 100%; justify-content: center; flex-wrap: wrap; }
     .role-btn {
       flex: 1; max-width: 260px; min-height: 120px; border: none; border-radius: 28px;
@@ -138,8 +139,8 @@
     .role-icon { font-size: 3rem; line-height: 1; }
     .role-label { font-size: 1.15rem; }
     .role-child  { background: linear-gradient(135deg, var(--teal), var(--teal-dark)); color: #fff; box-shadow: 0 10px 32px rgba(15,118,110,0.30); }
-    .role-parent { background: linear-gradient(135deg, #7c3aed, #5b21b6); color: #fff; box-shadow: 0 10px 32px rgba(124,58,237,0.28); }
-    /* ── confirmation cards ── */
+    .role-parent { display: none; }
+    /* â”€â”€ confirmation cards â”€â”€ */
     .confirmations { display: grid; gap: 10px; width: 100%; }
     .confirm-card {
       display: none; background: rgba(255,255,255,0.82);
@@ -148,13 +149,13 @@
     .confirm-card.visible { display: block; }
     .confirm-label { font-size: 0.68rem; letter-spacing: 0.14em; text-transform: uppercase; color: var(--teal-dark); font-weight: 700; display: block; margin-bottom: 4px; }
     .confirm-value { font-size: 1rem; color: var(--ink); word-break: break-word; }
-    /* ── skip ── */
+    /* â”€â”€ skip â”€â”€ */
     .skip-btn {
       background: none; border: none; color: var(--muted); font-size: 0.85rem;
       cursor: pointer; text-decoration: underline; padding: 6px 12px;
       min-height: 44px; opacity: 0; transition: opacity 0.5s;
     }
-    /* ── util ── */
+    /* â”€â”€ util â”€â”€ */
     [hidden] { display: none !important; }
   </style>
 </head>
@@ -194,24 +195,24 @@
 
     <!-- Mic -->
     <div class="mic-wrap" id="mic-wrap" hidden>
-      <div class="mic-ring idle" id="mic-ring">🎤</div>
-      <p class="mic-label" id="mic-label">Listening…</p>
+      <div class="mic-ring idle" id="wizard-mic-ring">ðŸŽ¤</div>
+      <p class="mic-label" id="wizard-mic-label">Listeningâ€¦</p>
     </div>
 
     <!-- Yes / No -->
     <div class="yn-row" id="yn-row" hidden>
-      <button class="yn-btn yn-yes" id="yn-yes">✓ Yes, correct!</button>
-      <button class="yn-btn yn-no"  id="yn-no">✗ No, try again</button>
+      <button class="yn-btn yn-yes" id="yn-yes">âœ“ Yes, correct!</button>
+      <button class="yn-btn yn-no"  id="yn-no">âœ— No, try again</button>
     </div>
 
-    <!-- Role selection — shown at the very end -->
+    <!-- Role selection â€” shown at the very end -->
     <div class="role-row" id="role-row" hidden>
       <button class="role-btn role-child" id="role-child">
-        <span class="role-icon">🧒</span>
-        <span class="role-label">I'm the child<br><small style="font-weight:400;font-size:0.8em">Start practice!</small></span>
+        <span class="role-icon">ðŸ§’</span>
+        <span class="role-label">Let's start playing!</span>
       </button>
       <button class="role-btn role-parent" id="role-parent">
-        <span class="role-icon">👨‍⚕️</span>
+        <span class="role-icon">ðŸ‘¨â€âš•ï¸</span>
         <span class="role-label">Parent / Therapist<br><small style="font-weight:400;font-size:0.8em">Open dashboard</small></span>
       </button>
     </div>
@@ -232,15 +233,304 @@
       </article>
     </div>
 
-    <button class="skip-btn" id="skip-btn">Skip — choose manually instead</button>
+    <button class="skip-btn" id="skip-btn">Skip â€” choose manually instead</button>
   </div>
 </div>
+
+<div id="child-mode" class="mode-screen" hidden>
+  <div id="session-screen" class="session-screen">
+
+    <!-- Header -->
+    <header class="session-header" role="banner">
+      <div class="header-left">
+        <span class="child-name-badge" id="session-child-name" aria-live="polite">â€”</span>
+      </div>
+      <div class="header-center" aria-label="Reward stars">
+        <div class="stars-display" id="stars-display" role="img" aria-label="0 of 5 stars earned">
+          <span class="star" aria-hidden="true">â˜†</span>
+          <span class="star" aria-hidden="true">â˜†</span>
+          <span class="star" aria-hidden="true">â˜†</span>
+          <span class="star" aria-hidden="true">â˜†</span>
+          <span class="star" aria-hidden="true">â˜†</span>
+        </div>
+      </div>
+      <div class="header-right">
+        <span class="provider-badge mock" id="stt-badge" title="Speech-to-text">STT</span>
+        <span class="provider-badge mock" id="tts-badge" title="Text-to-speech">TTS</span>
+        <button class="icon-btn" id="end-session-btn" title="End session" aria-label="End session">
+          <span aria-hidden="true">âœ•</span>
+        </button>
+      </div>
+    </header>
+
+    <!-- Practice arena -->
+    <main class="practice-arena" role="main">
+
+      <div class="mascot-column">
+        <div class="mascot lips-mascot idle" id="mascot" role="img" aria-label="TalkBuddy mascot">
+          <svg viewBox="0 0 200 100" xmlns="http://www.w3.org/2000/svg">
+            <path class="lip-upper-sess"
+              d="M 20 50 C 50 20, 80 15, 100 22 C 120 15, 150 20, 180 50
+                 C 155 40, 130 36, 100 38 C 70 36, 45 40, 20 50 Z"
+              fill="#e05c7a" stroke="#c0445f" stroke-width="1.5"/>
+            <path d="M 70 28 Q 100 18 130 28" fill="none" stroke="#f08098" stroke-width="2" stroke-linecap="round"/>
+            <path class="lip-lower-sess"
+              d="M 20 50 C 45 60, 70 70, 100 72 C 130 70, 155 60, 180 50
+                 C 155 56, 130 62, 100 64 C 70 62, 45 56, 20 50 Z"
+              fill="#d44060" stroke="#b03050" stroke-width="1.5"/>
+            <ellipse cx="100" cy="62" rx="30" ry="5" fill="#e87090" opacity="0.4"/>
+          </svg>
+        </div>
+
+        <div class="mascot-bubble" id="mascot-bubble" hidden aria-live="polite" aria-atomic="true">
+          <p id="mascot-bubble-text"></p>
+        </div>
+
+        <p class="mascot-status" id="mascot-status" aria-live="polite">Mic live</p>
+      </div>
+
+      <div class="target-column">
+        <p class="prompt-label" id="prompt-label">Say this word:</p>
+
+        <div class="target-card" id="target-card" aria-label="Practice target">
+          <div class="target-icon" id="target-icon" aria-hidden="true">ðŸ’¬</div>
+          <div class="target-word" id="target-word" aria-live="polite">â€”</div>
+        </div>
+
+        <p class="target-cue" id="target-cue" aria-live="polite"></p>
+
+                <div class="mic-area" aria-label="Microphone status">
+          <div class="mic-ring idle" id="mic-ring" aria-hidden="true">
+            <span class="mic-icon">??</span>
+          </div>
+          <p class="mic-label" id="mic-label" aria-live="assertive">Waiting…</p>
+        </div>
+
+        <div class="interim-display" id="interim-display" aria-live="polite" aria-atomic="false"></div>
+      </div>
+    </main>
+
+    <!-- Celebration overlay -->
+    <div class="overlay" id="celebration-overlay" hidden style="display:none" role="alertdialog" aria-label="Great job!">
+      <div class="overlay-content">
+        <div class="overlay-emoji" id="celebration-emoji" aria-hidden="true">ðŸŒŸ</div>
+        <p class="overlay-title" id="celebration-title">Great job!</p>
+        <p class="overlay-sub" id="celebration-sub"></p>
+      </div>
+    </div>
+
+    <!-- Help overlay -->
+    <div class="overlay" id="help-overlay" hidden style="display:none" role="alertdialog" aria-label="Help needed">
+      <div class="overlay-content">
+        <div class="overlay-emoji" aria-hidden="true">ðŸ¤</div>
+        <p class="overlay-title">A grown-up will help now.</p>
+        <p class="overlay-sub" id="help-message"></p>
+        <button class="overlay-btn" id="dismiss-help-btn">OK</button>
+      </div>
+    </div>
+
+    <!-- Completed overlay -->
+    <div class="overlay" id="completed-overlay" hidden style="display:none" role="alertdialog" aria-label="Session complete">
+      <div class="overlay-content">
+        <div class="overlay-emoji" aria-hidden="true">ðŸ†</div>
+        <p class="overlay-title">Session done!</p>
+        <p class="overlay-sub" id="completed-sub"></p>
+        <button class="overlay-btn" id="start-over-btn">Practice Again</button>
+      </div>
+    </div>
+
+  </div>
+</div>
+
+<div id="caregiver-mode" class="mode-screen" hidden>
+
+  <header class="caregiver-header" role="banner">
+    <div class="caregiver-header-left">
+      <h1 class="caregiver-title">TalkBuddy</h1>
+      <span class="caregiver-sub">Therapist / Caregiver View</span>
+    </div>
+    <div class="caregiver-header-right">
+      <label class="child-picker-label">
+        <span>Child:</span>
+        <select id="caregiver-child-select" aria-label="Select child">
+          <option value="">Loadingâ€¦</option>
+        </select>
+      </label>
+      <button class="icon-btn" id="refresh-btn" aria-label="Refresh dashboard">
+        <span aria-hidden="true">â†»</span>
+      </button>
+    </div>
+  </header>
+
+  <main class="caregiver-grid" role="main">
+
+    <section class="care-panel session-status-panel" aria-labelledby="panel-session-title">
+      <h2 class="panel-title" id="panel-session-title">
+        <span class="panel-icon" aria-hidden="true">ðŸ“‹</span> Current Session
+      </h2>
+      <div id="session-panel-content"><p class="care-empty">No active session.</p></div>
+    </section>
+
+    <section class="care-panel alerts-panel" aria-labelledby="panel-alerts-title">
+      <h2 class="panel-title" id="panel-alerts-title">
+        <span class="panel-icon" aria-hidden="true">âš ï¸</span> Alerts
+        <span class="badge-count zero" id="alert-badge" aria-live="polite">0</span>
+      </h2>
+      <div id="alerts-panel-content" aria-live="polite"><p class="care-empty">No alerts. All good!</p></div>
+    </section>
+
+    <section class="care-panel progress-panel" aria-labelledby="panel-progress-title">
+      <h2 class="panel-title" id="panel-progress-title">
+        <span class="panel-icon" aria-hidden="true">ðŸ“ˆ</span> Progress
+      </h2>
+      <div id="progress-panel-content"><p class="care-empty">Select a child above to view progress.</p></div>
+    </section>
+
+    <section class="care-panel clinician-panel" aria-labelledby="panel-clinician-title">
+      <h2 class="panel-title" id="panel-clinician-title">
+        <span class="panel-icon" aria-hidden="true">ðŸ©º</span> Clinician Notes
+      </h2>
+      <div id="clinician-panel-content"><p class="care-empty">No pending reviews.</p></div>
+    </section>
+
+  </main>
+</div>
+
+<script src="/static/mic-manager.js"></script>
+<script src="/static/session.js" defer></script>
+<script>
+'use strict';
+
+function esc(t) {
+  return String(t ?? '').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
+}
+
+async function api(path) {
+  const r = await fetch(path);
+  if (!r.ok) throw new Error(path + ' ' + r.status);
+  return r.json();
+}
+
+async function loadDashboard(childId) {
+  if (!childId) return;
+  const [alerts, report] = await Promise.all([
+    api(`/caregiver/alerts?caregiver_id=${encodeURIComponent(childId)}`).catch(() => []),
+    api(`/reports/child/${encodeURIComponent(childId)}`).catch(() => null),
+  ]);
+
+  // Alerts
+  const alertEl = document.getElementById('alerts-panel-content');
+  const badge   = document.getElementById('alert-badge');
+  if (!alerts.length) {
+    alertEl.innerHTML = '<p class="care-empty">No alerts. All good!</p>';
+    badge.textContent = '0'; badge.classList.add('zero');
+  } else {
+    badge.textContent = alerts.length; badge.classList.remove('zero');
+    alertEl.innerHTML = alerts.map(a => `
+      <div class="alert-item" data-id="${esc(a.alert_id)}">
+        <span class="alert-reason">${esc(a.reason.replace(/_/g,' '))}</span>
+        <p class="alert-message">${esc(a.message)}</p>
+        <span class="alert-meta">${new Date(a.created_at).toLocaleString()}</span>
+        <button class="ack-btn" data-id="${esc(a.alert_id)}">Acknowledge</button>
+      </div>`).join('');
+    alertEl.querySelectorAll('.ack-btn').forEach(btn => {
+      btn.addEventListener('click', async () => {
+        await fetch(`/caregiver/alerts/${btn.dataset.id}/acknowledge`, {method:'POST'}).catch(()=>{});
+        btn.closest('.alert-item').remove();
+        const rem = alertEl.querySelectorAll('.alert-item').length;
+        badge.textContent = rem || '0';
+        if (!rem) { alertEl.innerHTML = '<p class="care-empty">No alerts. All good!</p>'; badge.classList.add('zero'); }
+      });
+    });
+  }
+
+  // Session status
+  const sessEl = document.getElementById('session-panel-content');
+  if (report?.recent_sessions?.length) {
+    const s = report.recent_sessions[0];
+    const statusLabel = {active:'Active',completed:'Completed',escalated:'âš  Escalated'}[s.status] || s.status;
+    sessEl.innerHTML = `
+      <div class="stat-row"><span>Status</span><span class="stat-value">${statusLabel}</span></div>
+      <div class="stat-row"><span>Target</span><span class="stat-value">${esc(s.current_target)}</span></div>
+      <div class="stat-row"><span>Points</span><span class="stat-value">â­ ${s.reward_points}</span></div>
+      <div class="stat-row"><span>Started</span><span class="stat-value" style="font-size:var(--sz-base)">${new Date(s.started_at).toLocaleString()}</span></div>`;
+  } else {
+    sessEl.innerHTML = '<p class="care-empty">No recent sessions.</p>';
+  }
+
+  // Progress
+  const progEl = document.getElementById('progress-panel-content');
+  if (report?.progress?.length) {
+    progEl.innerHTML = [...report.progress]
+      .sort((a,b) => b.mastery_score - a.mastery_score)
+      .slice(0, 10)
+      .map(p => {
+        const pct = Math.round(p.mastery_score * 100);
+        return `<div class="progress-item">
+          <span class="progress-word">${esc(p.target_text)}</span>
+          <span class="progress-pct">${pct}%</span>
+          <div class="progress-bar-track"><div class="progress-bar-fill" style="width:${pct}%"></div></div>
+        </div>`;
+      }).join('');
+  } else {
+    progEl.innerHTML = '<p class="care-empty">No practice data yet.</p>';
+  }
+
+  // Clinician
+  if (report?.child?.clinician_id) {
+    const reviews = await api(`/clinician/queue?clinician_id=${encodeURIComponent(report.child.clinician_id)}`).catch(() => []);
+    const clinEl = document.getElementById('clinician-panel-content');
+    clinEl.innerHTML = reviews.length
+      ? reviews.map(r => `<div class="review-item">
+          <span class="review-priority ${esc(r.priority)}">${esc(r.priority.toUpperCase())} PRIORITY</span>
+          <p class="review-summary">${esc(r.summary)}</p>
+        </div>`).join('')
+      : '<p class="care-empty">No pending reviews.</p>';
+  }
+}
+
+async function boot() {
+  const children = await api('/children').catch(() => []);
+  const sel = document.getElementById('caregiver-child-select');
+  sel.innerHTML = children.map(c =>
+    `<option value="${esc(c.child_id)}">${esc(c.name)} (${c.age})</option>`
+  ).join('');
+  if (children.length) {
+    sel.value = children[0].child_id;
+    loadDashboard(children[0].child_id);
+  }
+  sel.addEventListener('change', e => loadDashboard(e.target.value));
+  document.getElementById('refresh-btn').addEventListener('click', () => loadDashboard(sel.value));
+}
+
+window.TalkBuddyTherapistApp = {
+  boot(payload = {}) {
+    const sub = document.querySelector('.caregiver-sub');
+    if (sub) {
+      sub.textContent = payload.caregiverName
+        ? `Therapist / Caregiver View — ${payload.caregiverName}`
+        : 'Therapist / Caregiver View';
+    }
+    return boot().then(async () => {
+      const sel = document.getElementById('caregiver-child-select');
+      if (payload.childId && sel) {
+        sel.value = payload.childId;
+        await loadDashboard(payload.childId);
+      }
+    });
+  },
+};
+setInterval(() => {
+  const sel = document.getElementById('caregiver-child-select');
+  if (sel?.value) loadDashboard(sel.value);
+}, 30000); // auto-refresh every 30 s
+</script>
 
 <script>
 (() => {
   'use strict';
 
-  /* ── DOM ── */
+  /* â”€â”€ DOM â”€â”€ */
   const card       = document.getElementById('card');
   const lips       = document.getElementById('lips');
   const prompt     = document.getElementById('prompt');
@@ -248,8 +538,8 @@
   const nameLetters= document.getElementById('name-letters');
   const interim    = document.getElementById('interim');
   const micWrap    = document.getElementById('mic-wrap');
-  const micRing    = document.getElementById('mic-ring');
-  const micLabel   = document.getElementById('mic-label');
+  const micRing    = document.getElementById('wizard-mic-ring');
+  const micLabel   = document.getElementById('wizard-mic-label');
   const ynRow      = document.getElementById('yn-row');
   const ynYes      = document.getElementById('yn-yes');
   const ynNo       = document.getElementById('yn-no');
@@ -267,14 +557,17 @@
   const ccLastVal  = document.getElementById('cc-last-val');
   const ccCarerVal = document.getElementById('cc-carer-val');
 
-  /* ── State ── */
-  const data = { firstName:'', lastName:'', carerName:'' };
+  /* â”€â”€ State â”€â”€ */
+    const data = { firstName:'', lastName:'', carerName:'' };
   let started = false;
+  const SHELL_HANDOFF_KEY = 'tb_shell_handoff';
+  const SHELL_HANDOFF_TTL_MS = 120000;
+  const shellChannel = ('BroadcastChannel' in window) ? new BroadcastChannel('talkbuddy-shell') : null;
 
-  /* ── Lips animation ── */
+  /* â”€â”€ Lips animation â”€â”€ */
   function setLips(anim) { lips.className = `lips-wrap ${anim}`; }
 
-  /* ── Step pills ── */
+  /* â”€â”€ Step pills â”€â”€ */
   function setStep(s) {
     [stepChild, stepCarer, stepReady].forEach(el => el.classList.remove('active'));
     if (s === 'child')  stepChild.classList.add('active');
@@ -282,7 +575,7 @@
     if (s === 'ready')  stepReady.classList.add('active');
   }
 
-  /* ── Mic ring ── */
+  /* â”€â”€ Mic ring â”€â”€ */
   function setMic(mode, label) {
     micWrap.hidden = false;
     micRing.className = `mic-ring ${mode}`;
@@ -290,17 +583,17 @@
   }
   function hideMic() { micWrap.hidden = true; }
 
-  /* ── Name display ── */
+  /* â”€â”€ Name display â”€â”€ */
   function showLetters(text) {
     nameLetters.textContent = text.toUpperCase();
     nameDisp.hidden = false;
   }
   function hideLetters() { nameDisp.hidden = true; }
 
-  /* ── Interim ── */
+  /* â”€â”€ Interim â”€â”€ */
   function setInterim(t) { interim.hidden = !t; interim.textContent = t || ''; }
 
-  /* ── Speak ── */
+  /* â”€â”€ Speak â”€â”€ */
   function speak(text) {
     return new Promise(resolve => {
       if (!text?.trim()) { resolve(); return; }
@@ -321,7 +614,7 @@
     });
   }
 
-  /* ── Listen ── */
+  /* â”€â”€ Listen â”€â”€ */
   function listenOnce({ interimCb, timeout = 10000 } = {}) {
     return new Promise(resolve => {
       const SR = window.SpeechRecognition || window.webkitSpeechRecognition;
@@ -343,7 +636,7 @@
     });
   }
 
-  /* ── Yes / No tap ── */
+  /* â”€â”€ Yes / No tap â”€â”€ */
   function askYesNo() {
     return new Promise(resolve => {
       ynRow.hidden = false;
@@ -360,7 +653,7 @@
     });
   }
 
-  /* ── Spell parsing ── */
+  /* â”€â”€ Spell parsing â”€â”€ */
   const NATO = { alpha:'A',bravo:'B',charlie:'C',delta:'D',echo:'E',foxtrot:'F',
     golf:'G',hotel:'H',india:'I',juliet:'J',kilo:'K',lima:'L',mike:'M',
     november:'N',oscar:'O',papa:'P',quebec:'Q',romeo:'R',sierra:'S',tango:'T',
@@ -383,26 +676,26 @@
     return s.replace(/\w\S*/g, w => w[0].toUpperCase() + w.slice(1).toLowerCase());
   }
 
-  /* ── Show confirmation card ── */
+  /* â”€â”€ Show confirmation card â”€â”€ */
   function showCard(which, val) {
     if (which === 'first') { ccFirstVal.textContent = val; ccFirst.classList.add('visible'); }
     if (which === 'last')  { ccLastVal.textContent  = val; ccLast.classList.add('visible'); }
     if (which === 'carer') { ccCarerVal.textContent = val; ccCarer.classList.add('visible'); }
   }
 
-  /* ── Collect name with spell+confirm loop ── */
+  /* â”€â”€ Collect name with spell+confirm loop â”€â”€ */
   async function collectName(label) {
     while (true) {
       // Ask for name
       await speak(`Please say the child's ${label}.`);
-      setMic('listening', 'Listening…');
+      setMic('listening', 'Listeningâ€¦');
       setInterim('');
       const heard = await listenOnce({ interimCb: t => setInterim(t), timeout: 9000 });
       hideMic(); setInterim('');
 
       // Ask to spell
       await speak(`Can you please spell the ${label}?`);
-      setMic('listening', 'Spelling…');
+      setMic('listening', 'Spellingâ€¦');
       setInterim('');
       const spelt = await listenOnce({ interimCb: t => setInterim(t), timeout: 12000 });
       hideMic(); setInterim('');
@@ -419,7 +712,7 @@
 
       // Correction
       await speak(`Okay, please say the corrected spelling for the ${label}.`);
-      setMic('listening', 'Correction…');
+      setMic('listening', 'Correctionâ€¦');
       setInterim('');
       const correction = await listenOnce({ interimCb: t => setInterim(t), timeout: 12000 });
       hideMic(); setInterim('');
@@ -435,36 +728,95 @@
     }
   }
 
-  /* ── Collect caregiver name (no spelling) ── */
+  /* â”€â”€ Collect caregiver name (no spelling) â”€â”€ */
   async function collectCarerName() {
     await speak('And your name? Please say the parent or caregiver name.');
-    setMic('listening', 'Listening…');
+    setMic('listening', 'Listeningâ€¦');
     setInterim('');
     const heard = await listenOnce({ interimCb: t => setInterim(t), timeout: 9000 });
     hideMic(); setInterim('');
     return titleCase(heard || 'Caregiver');
   }
 
-  /* ── Match child and start session ── */
-  async function startSessionForChild() {
+  /* â”€â”€ Match child and start session â”€â”€ */
+  const wait = (ms) => new Promise(resolve => setTimeout(resolve, ms));
+    async function startSessionForChild() {
     try {
       const children = await fetch('/children').then(r => r.json());
       const fn = data.firstName.charAt(0).toLowerCase();
       const matched = children.find(c => c.name.toLowerCase().startsWith(fn)) || children[0];
-      if (!matched) return;
+      if (!matched) return null;
       const session = await fetch('/session/start', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ child_id: matched.child_id }),
       }).then(r => r.json());
-      sessionStorage.setItem('tb_session_id',   session.session_id);
-      sessionStorage.setItem('tb_child_id',      matched.child_id);
-      sessionStorage.setItem('tb_child_name',    data.firstName || matched.name);
-      sessionStorage.setItem('tb_session_data',  JSON.stringify(session));
-    } catch { /* network unavailable — session.js will handle redirect */ }
+      const childName = data.firstName || matched.name;
+      sessionStorage.setItem('tb_session_id', session.session_id);
+      sessionStorage.setItem('tb_child_id', matched.child_id);
+      sessionStorage.setItem('tb_child_name', childName);
+      sessionStorage.setItem('tb_session_data', JSON.stringify(session));
+      return {
+        childId: matched.child_id,
+        childName,
+        caregiverName: data.carerName,
+        sessionId: session.session_id,
+      };
+    } catch {
+      return null;
+    }
   }
 
-  /* ── Main wizard ── */
+  function openChildPanel() {
+    document.querySelector('.page').hidden = true;
+    document.getElementById('caregiver-mode').hidden = true;
+    document.getElementById('child-mode').hidden = false;
+  }
+
+  function openCaregiverPanel(payload = {}) {
+    document.querySelector('.page').hidden = true;
+    document.getElementById('child-mode').hidden = true;
+    document.getElementById('caregiver-mode').hidden = false;
+    if (window.TalkBuddyTherapistApp?.boot) {
+      window.TalkBuddyTherapistApp.boot(payload);
+    }
+  }
+
+  function buildTherapistHandoff(sessionInfo = {}) {
+    return {
+      type: 'therapist-handoff',
+      childId: sessionInfo.childId || sessionStorage.getItem('tb_child_id') || '',
+      childName: sessionInfo.childName || data.firstName || '',
+      caregiverName: sessionInfo.caregiverName || data.carerName || '',
+      issuedAt: Date.now(),
+    };
+  }
+
+  function readTherapistHandoff() {
+    try {
+      const payload = JSON.parse(localStorage.getItem(SHELL_HANDOFF_KEY) || 'null');
+      if (!payload || payload.type !== 'therapist-handoff') return null;
+      if ((Date.now() - Number(payload.issuedAt || 0)) > SHELL_HANDOFF_TTL_MS) return null;
+      return payload;
+    } catch {
+      return null;
+    }
+  }
+
+  function publishTherapistHandoff(sessionInfo = {}) {
+    const payload = buildTherapistHandoff(sessionInfo);
+    localStorage.setItem(SHELL_HANDOFF_KEY, JSON.stringify(payload));
+    try { shellChannel?.postMessage(payload); } catch {}
+    return payload;
+  }
+
+  function applyTherapistHandoff(payload) {
+    if (!payload) return false;
+    openCaregiverPanel(payload);
+    return true;
+  }
+
+  /* â”€â”€ Main wizard â”€â”€ */
   async function runWizard() {
     setStep('child');
 
@@ -486,42 +838,35 @@
 
     setStep('ready');
 
-    await speak("Great! Let's start playing. Who is using this device?");
+    await speak(`Great job ${data.firstName}! Let's start playing.`);
 
-    // Role selection
     hideMic();
     hideLetters();
     setInterim('');
     ynRow.hidden = true;
-    prompt.textContent = 'Who is using this device?';
-    roleRow.hidden = false;
-  }
-
-  /* ── Role buttons ── */
-  roleChild.addEventListener('click', async () => {
     roleRow.hidden = true;
-    prompt.textContent = 'Starting your practice session…';
     setLips('speak');
+    prompt.textContent = `Starting ${data.firstName}'s practice session…`;
     await startSessionForChild();
-    window.location.href = '/session';
-  });
+    await (window.TalkBuddySessionApp?.startEmbeddedSession?.({ preloadOnly: true }) || Promise.resolve());
+    await wait(5000);
+    openChildPanel();
+    await (window.TalkBuddySessionApp?.startEmbeddedSession?.() || Promise.resolve());
+  }
+  /* Child session starts automatically after welcome */
+  roleRow.hidden = true;
 
-  roleParent.addEventListener('click', () => {
-    roleRow.hidden = true;
-    prompt.textContent = 'Opening caregiver dashboard…';
-    window.location.href = '/therapy';
-  });
-
-  /* ── Skip button ── */
+  /* Skip button */
   skipBtn.addEventListener('click', () => {
-    window.location.href = '/therapy';
+    prompt.textContent = `Let's start playing, ${data.firstName || 'friend'}!`;
   });
 
-  /* ── Tap anywhere on card to start ── */
+  /* â”€â”€ Tap anywhere on card to start â”€â”€ */
   card.addEventListener('click', function onFirstTap() {
     card.removeEventListener('click', onFirstTap);
     card.classList.add('active');
     skipBtn.style.opacity = '1';
+    Promise.resolve(window.TalkBuddyMicManager?.prime?.()).catch(() => {});
     // Warm up voices (user gesture now available)
     if ('speechSynthesis' in window) {
       const w = new SpeechSynthesisUtterance('');
@@ -529,8 +874,26 @@
       window.speechSynthesis.cancel();
       window.speechSynthesis.getVoices();
     }
-    if (!started) { started = true; runWizard().catch(() => { window.location.href = '/therapy'; }); }
+    if (!started) { started = true; runWizard().catch((error) => { console.error(error); prompt.textContent = 'Something went wrong. Please refresh and try again.'; setLips('idle'); hideMic(); }); }
   }, { once: true });
+
+  const handleTherapistHandoff = (payload) => {
+    if (!payload || payload.type !== 'therapist-handoff') return;
+    applyTherapistHandoff(payload);
+  };
+
+  window.addEventListener('storage', (event) => {
+    if (event.key !== SHELL_HANDOFF_KEY || !event.newValue) return;
+    try {
+      handleTherapistHandoff(JSON.parse(event.newValue));
+    } catch {}
+  });
+
+  try {
+    shellChannel?.addEventListener('message', (event) => handleTherapistHandoff(event.data));
+  } catch {}
+
+  applyTherapistHandoff(readTherapistHandoff());
 
   // Pre-warm voices on page load
   if ('speechSynthesis' in window) {
@@ -541,3 +904,12 @@
 </script>
 </body>
 </html>
+
+
+
+
+
+
+
+
+
