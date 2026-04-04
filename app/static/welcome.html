@@ -740,13 +740,18 @@ setInterval(() => {
 
   /* â”€â”€ Match child and start session â”€â”€ */
   const wait = (ms) => new Promise(resolve => setTimeout(resolve, ms));
-    async function startSessionForChild() {
+  const fetchWithTimeout = (url, opts = {}, ms = 8000) => {
+    const ctrl = new AbortController();
+    const t = setTimeout(() => ctrl.abort(), ms);
+    return fetch(url, { ...opts, signal: ctrl.signal }).finally(() => clearTimeout(t));
+  };
+  async function startSessionForChild() {
     try {
-      const children = await fetch('/children').then(r => r.json());
+      const children = await fetchWithTimeout('/children').then(r => r.json());
       const fn = data.firstName.charAt(0).toLowerCase();
       const matched = children.find(c => c.name.toLowerCase().startsWith(fn)) || children[0];
       if (!matched) return null;
-      const session = await fetch('/session/start', {
+      const session = await fetchWithTimeout('/session/start', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ child_id: matched.child_id }),
@@ -847,7 +852,12 @@ setInterval(() => {
     roleRow.hidden = true;
     setLips('speak');
     prompt.textContent = `Starting ${data.firstName}'s practice session…`;
-    await startSessionForChild();
+    const sessionInfo = await startSessionForChild();
+    if (!sessionInfo) {
+      setLips('idle');
+      prompt.textContent = 'Could not connect to the server. Please check your connection and refresh.';
+      return;
+    }
     await (window.TalkBuddySessionApp?.startEmbeddedSession?.({ preloadOnly: true }) || Promise.resolve());
     await wait(5000);
     openChildPanel();
