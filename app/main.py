@@ -26,6 +26,7 @@ from app.models import (
     AttemptIngestionRequest,
     ChildAnalytics,
     ChildAttemptVector,
+    ChildCreateRequest,
     ChildProfile,
     ChildReport,
     ClinicianReviewItem,
@@ -708,6 +709,27 @@ def match_reference(target_id: str = Query(...), modality: str = Query(...), emb
 @app.get("/children", response_model=list[ChildProfile])
 def get_children() -> list[ChildProfile]:
     return list(store.children.values())
+
+
+@app.post("/children", response_model=ChildProfile, status_code=201)
+def create_child(payload: ChildCreateRequest) -> ChildProfile:
+    import uuid
+    child_id = f"child-{uuid.uuid4().hex[:8]}"
+    default_goals = [
+        Goal(goal_id=f"{child_id}-g1", target_text="ba", cue="Tap your lips together, then say ba."),
+        Goal(goal_id=f"{child_id}-g2", target_text="ma", cue="Close your lips and hum gently for ma."),
+        Goal(goal_id=f"{child_id}-g3", target_text="pa", cue="Use a small puff of air for pa."),
+    ]
+    child = ChildProfile(
+        child_id=child_id,
+        name=payload.name.strip().title(),
+        age=payload.age,
+        caregiver_id="caregiver-1",
+        clinician_id="slp-1",
+        goals=default_goals,
+    )
+    store.children[child_id] = child
+    return child
 
 
 @app.post("/session/start", response_model=SessionStartResponse)

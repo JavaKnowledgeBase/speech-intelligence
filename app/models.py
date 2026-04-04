@@ -493,6 +493,11 @@ class VoiceRuntimeSession(BaseModel):
     notes: list[str] = Field(default_factory=list)
 
 
+class ChildCreateRequest(BaseModel):
+    name: str
+    age: int = 4
+
+
 class SessionStartRequest(BaseModel):
     child_id: str
     environment: EnvironmentCheckRequest | None = None

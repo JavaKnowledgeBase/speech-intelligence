@@ -193,22 +193,58 @@ async function completeSessionApi() {
   api(`/sessions/${state.sessionId}/complete`, { method: "POST" }).catch(() => {});
 }
 
+// ── Screen wake ──────────────────────────────────────────────────────────────
+// WakeLock API is not supported on iOS Safari. Fall back to a silent looping
+// audio element — iOS keeps the screen alive while audio is playing.
+let _iosWakeAudio = null;
+
+function _startIosWake() {
+  if (_iosWakeAudio) return;
+  // Minimal silent WAV (44 bytes, 0 samples, 8-bit mono 8kHz)
+  const silentWav = "data:audio/wav;base64,UklGRiQAAABXQVZFZm10IBAAAAABAAEARKwAAIhYAQACABAAZGF0YQAAAAA=";
+  _iosWakeAudio = new Audio(silentWav);
+  _iosWakeAudio.loop = true;
+  _iosWakeAudio.volume = 0.001;
+  _iosWakeAudio.play().catch(() => {});
+}
+
+function _stopIosWake() {
+  if (!_iosWakeAudio) return;
+  _iosWakeAudio.pause();
+  _iosWakeAudio = null;
+}
+
 async function requestWakeLock() {
-  if (!("wakeLock" in navigator)) return;
-  try {
-    state.wakeLock = await navigator.wakeLock.request("screen");
-  } catch {}
+  if ("wakeLock" in navigator) {
+    try {
+      state.wakeLock = await navigator.wakeLock.request("screen");
+      return;
+    } catch {}
+  }
+  // iOS Safari fallback
+  _startIosWake();
 }
 
 function releaseWakeLock() {
-  if (!state.wakeLock) return;
-  state.wakeLock.release().catch(() => {});
-  state.wakeLock = null;
+  if (state.wakeLock) {
+    state.wakeLock.release().catch(() => {});
+    state.wakeLock = null;
+  }
+  _stopIosWake();
 }
 
 document.addEventListener("visibilitychange", () => {
   if (document.visibilityState === "visible" && state.sessionId) {
+    // Re-request wake lock (iOS releases it on app-switch)
     requestWakeLock();
+    // Resume AudioContext — iOS suspends it when the app goes to background
+    if (state.deepgramAudioContext?.state === "suspended") {
+      state.deepgramAudioContext.resume().catch(() => {});
+    }
+    // Restart browser STT if it died on background
+    if (state.sessionState === S.LISTENING && !state.recognitionActive && !state.deepgramReady) {
+      startListening();
+    }
   }
 });
 

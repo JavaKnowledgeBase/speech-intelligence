@@ -2,27 +2,24 @@
 
 ## Product shape
 
-TalkBuddy should be built as an expert-routed agentic platform with human oversight, not as a single LLM app.
+TalkBuddy is an expert-routed agentic speech therapy platform with human oversight, not a single LLM app.
 
 ## Core purpose
 
 The core purpose is to encourage the child to speak.
 
-The product should optimize for:
-
+The product optimises for:
 - spoken attempts
 - imitation
 - vocal confidence
 - repeated speech production
 
-It should not drift into being mainly:
-
-- a vocabulary familiarization app
+It must not drift into:
+- a vocabulary familiarisation app
 - a text familiarity tool
 - a passive reading or viewing experience
 
-The child session should be handled by a conductor agent that consults narrow experts:
-
+The child session is handled by a conductor agent that consults narrow experts:
 - speech scoring expert
 - engagement expert
 - care-plan expert
@@ -32,133 +29,195 @@ The child session should be handled by a conductor agent that consults narrow ex
 - environment expert
 - output filter expert
 
-## Device targets
+---
 
-The app should support:
+## Primary device targets
 
-- tablets
-- TVs
-- desktops
+| Device | Role | Input |
+|--------|------|-------|
+| **iPad (child)** | Therapy session — child-facing | Microphone, touch |
+| **iPad / tablet (caregiver)** | Live monitoring + alerts | Touch |
+| **TV (room display)** | Caregiver dashboard, session overview | Remote / cast |
+| **Desktop** | Clinician review, admin, reporting | Mouse + keyboard |
 
-That means the frontend should be optimized for:
+### iPad requirements (child device — highest priority)
+- HTTPS mandatory — `getUserMedia` refuses on iOS without it
+- Installed as PWA (home screen, fullscreen, no browser chrome)
+- Landscape orientation locked
+- Screen must stay awake for full session — WakeLock API is not supported on iOS Safari; use silent audio loop workaround
+- AudioContext must resume after app-switch — iOS suspends it on `visibilitychange`
+- No reliance on `window.SpeechRecognition` — use Deepgram streaming exclusively
+- Touch targets minimum 72px for child use
+- No scrolling in session view
 
-- touch-first controls where appropriate
-- large tap targets
-- large visual prompts
-- high legibility from several feet away on TV
-- simple navigation without keyboard dependence for child therapy mode
-- landscape layouts as a first-class target
-- minimal reading burden for the child
-- responsive layouts that also work well on desktop for caregiver, clinician, and admin workflows
+### TV requirements (caregiver display)
+- Layout readable at 3+ metres — minimum 2rem base font, 4rem headings
+- High contrast, no hover-dependent interactions
+- Navigation via remote (focus states required on all interactive elements)
+- Can be driven by AirPlay/cast from iPad or standalone browser session
+- No microphone required
 
-The system should not assume a desktop mouse-and-keyboard setup for therapy sessions only, but desktop must still be fully supported as a product surface.
+---
 
 ## Voice-first product rule
-The product should be treated as a voice-first application.
-Inference:
-- more than 98 percent of child-session interaction should be speech input and speech output
-- text should exist mainly for clinician, caregiver, admin, audit, and fallback use
-- frontend work should optimize for dependable microphone capture, low-latency playback, barge-in, and recovery before rich visual complexity
-## Recommended voice architecture
-For dependable production behavior, prefer a layered voice pipeline over a single speech-to-speech model.
-Default path:
-1. LiveKit WebRTC transports microphone audio and speaker playback.
-2. Deepgram Flux handles streaming speech-to-text and turn detection.
-3. OpenAI Responses API handles orchestration, reasoning, reporting, and tool use.
-4. A dedicated TTS provider speaks the approved response back to the user.
-5. OpenAI Realtime API is used selectively as a conversational fallback mode, not as the only runtime path.
-Why this is the default:
-- it preserves exact control over child-facing wording
-- it improves debuggability through text transcripts
-- it keeps guardrails, audit, and workflow hooks in the middle of the loop
-- it reduces lock-in to a single speech stack
-- it gives better fallback behavior when one provider degrades
-## Voice reliability requirements
-The frontend and runtime should support:
-- continuous microphone capture with clear recording state
-- interruption and barge-in while the system is speaking
-- streaming partial transcripts for internal state and caregiver debugging
-- graceful fallback when STT, TTS, or reasoning latency spikes
-- a short cached "please wait" voice response when the main path is slow
-- persistent transcript and event logging for review, analytics, and safety audits
-- separate voice styles for child-facing, caregiver-facing, and clinician-facing output
-- latency tracking for turn end, first transcript, first token, first audio byte, and playback start
-## TTS recommendation
-Use dedicated streaming TTS for the default therapy loop when output wording must be precise or policy-constrained.
-Use speech-to-speech generation only for special cases where natural back-and-forth matters more than exact wording.
+
+More than 98% of child-session interaction must be speech input and speech output.
+Text exists for clinician, caregiver, admin, audit, and fallback use only.
+
+Frontend must optimise for:
+- dependable microphone capture
+- low-latency playback (target < 500ms turn-end to first audio byte)
+- barge-in support
+- graceful recovery from mic drop, network spike, or provider failure
+
+---
+
+## Recommended voice pipeline (production target)
+
+```
+iPad mic
+  │
+  ▼
+LiveKit WebRTC  ──────────────────────────────────────────►  Speaker playback
+  │                                                               ▲
+  ▼                                                               │
+Deepgram Flux (streaming STT + turn detection)               Dedicated TTS
+  │                                                               ▲
+  ▼                                                               │
+OpenAI Responses API  (conductor + experts + output filter) ─────┘
+  │
+  ▼
+Supabase  (session storage, profiles, audit trail)
+  │
+  ▼
+Temporal  (escalation workflows, reminders, clinician queue)
+```
+
+### Why this pipeline
+- Preserves exact control over child-facing wording (text in the loop, not speech-to-speech)
+- Full audit trail at the transcript layer (HIPAA requirement)
+- Deepgram supports custom vocabulary for therapy target words
+- Fallback at every layer — if Deepgram degrades, browser STT catches; if OpenAI spikes, cached prompt plays
+- LiveKit is provider-agnostic and supports both WebRTC and WebSocket transport
+
+---
+
+## Current implementation state vs target
+
+| Layer | Target | Current state | Gap |
+|-------|--------|---------------|-----|
+| Transport | LiveKit WebRTC | None (WebSocket direct) | LiveKit not wired |
+| STT | Deepgram Flux streaming | Browser SpeechRecognition + Gemini Live WS | Must replace |
+| Audio processing | AudioWorklet (dedicated thread) | ScriptProcessor (deprecated, main thread) | Must replace |
+| Evaluation | OpenAI Responses API (async) | Sequential sync httpx calls (~3s) | Parallelise |
+| TTS | Dedicated streaming TTS | Browser SpeechSynthesis + OpenAI HEAD ping | OpenAI TTS wired, HEAD method wrong (405) |
+| Data persistence | Supabase (load on startup) | In-memory only, lost on restart | Load from Supabase on startup |
+| Auth | Clerk (organisations + roles) | Passthrough (no secret key set) | Enable before production |
+| HTTPS | Caddy + Let's Encrypt | HTTP only | Add Caddy to docker-compose |
+| PWA | Installable, landscape, fullscreen | Plain HTML in browser | Add manifest + service worker |
+| Screen wake | Silent audio loop (iOS) | WakeLock only (not supported on iOS) | Add audio fallback |
+| Child creation | POST /children from wizard | Wizard matches seeded children only | Add child creation endpoint |
+
+---
+
 ## Recommended stack
 
-### 1. Realtime runtime
-- LiveKit Agents + WebRTC
-- Why: LiveKit officially positions its Agents framework as a realtime framework for voice and multimodal agents, with provider-agnostic integrations and observability.
+### 1. Realtime transport
+- **LiveKit Agents + WebRTC**
+- Provider-agnostic, built-in observability, supports both WebRTC and WebSocket
 - Source: https://docs.livekit.io/agents/
 
-### 2. Agent brain
-- OpenAI Responses API
-- Why: OpenAI describes the Responses API as the core primitive for agentic applications and highlights built-in tools plus remote MCP support.
+### 2. Speech recognition
+- **Deepgram Nova-3 / Flux**
+- Flux: conversational turn detection, low latency
+- Nova-3: highest accuracy for children's speech, custom vocabulary adaptation
+- HIPAA BAA available
+- Source: https://deepgram.com/product/speech-to-text
+
+### 3. Agent brain + conductor
+- **OpenAI Responses API**
+- Tool use, MCP support, built for agentic workflows
 - Source: https://openai.com/index/new-tools-and-features-in-the-responses-api/
 
-### 3. Speech-to-speech fallback
-- OpenAI Realtime API
-- Why: Official API docs say it supports low-latency speech-to-speech over WebRTC, WebSocket, and SIP.
+### 4. Speech-to-speech fallback
+- **OpenAI Realtime API**
+- Used selectively for natural back-and-forth only, not as the primary path
 - Source: https://platform.openai.com/docs/api-reference/realtime?api-mode=responses
 
-### 4. Speech recognition
-- Deepgram Nova / Flux
-- Why: Deepgram's official materials position Flux for conversational voice agents with integrated turn detection, while Nova-3 emphasizes multilingual accuracy and vocabulary adaptation.
-- Source: https://deepgram.com/product/speech-to-text
-- Source: https://deepgram.com/learn/introducing-nova-3-speech-to-text-api
-
 ### 5. Engagement detection
-- Hume Expression Measurement
-- Why: Hume's docs state it measures nuanced human expression across voice, face, and language, which is valuable for frustration, fatigue, and redirection signals.
+- **Hume Expression Measurement**
+- Voice + affect analysis for frustration, fatigue, and redirection signals
 - Source: https://dev.hume.ai/docs/expression-measurement/overview
 
 ### 6. Workflow engine
-- Temporal
-- Why: Best fit for durable timers, retries, reminders, escalation queues, and human-in-the-loop workflows.
+- **Temporal**
+- Durable timers, retries, escalation queues, human-in-the-loop
 - Source: https://docs.temporal.io/
 
 ### 7. Data platform
-- Supabase
-- Why: Postgres, storage, realtime, and edge functions make it a strong MVP-to-enterprise backbone.
+- **Supabase**
+- Postgres + storage + realtime + edge functions
 - Source: https://supabase.com/docs/guides/getting-started/features
-- Source: https://supabase.com/docs/guides/functions
 
 ### 8. Identity and tenancy
-- Clerk Organizations
-- Why: Official docs support organization roles and custom permissions, which fit clinics, schools, and enterprise admin models.
+- **Clerk Organisations**
+- Caregiver / clinician / admin roles with organisation-scoped permissions
 - Source: https://clerk.com/docs/guides/organizations/control-access/roles-and-permissions
 
-## Inference and caution
+### 9. Reverse proxy / HTTPS
+- **Caddy**
+- Automatic Let's Encrypt in production; self-signed for dev
+- Required for getUserMedia on iPad
 
-This is my recommended stack, not an absolute universal ranking.
+---
 
-Inference:
-- LiveKit is the best realtime shell for fast execution and provider flexibility.
-- OpenAI is the best conductor layer for tool-using agent workflows.
-- Deepgram is the easiest first STT choice for live therapy sessions.
-- Hume is the most relevant specialist API for affect-aware escalation.
+## Child session flow
 
-Before production lock-in, benchmark Deepgram against AssemblyAI on real pediatric speech samples because child speech is a special-case accuracy problem.
+1. iPad receives child audio via LiveKit WebRTC
+2. Deepgram Flux transcribes and detects turn end
+3. Hume scores vocal engagement from the audio stream
+4. OpenAI conductor checks room context, progress snapshot, and next action
+5. Output filter applies child-safe or caregiver-safe wording policy
+6. Dedicated TTS renders the approved response for playback
+7. Supabase stores session events, transcripts, and environment data
+8. Temporal triggers caregiver alerts or clinician review workflows
+9. Caregiver iPad / TV dashboard reads live session state and progress
 
-## Architecture slice
+---
 
-### Child session flow
-1. LiveKit receives child audio.
-2. Deepgram transcribes and detects turns.
-3. Hume scores vocal engagement.
-4. OpenAI conductor checks room context, progress, and next action.
-5. Output is passed through the child-safe or caregiver-safe filter layer.
-6. Dedicated TTS renders the approved response for playback.
-7. Supabase stores session and environment data.
-8. Temporal triggers caregiver or clinician workflows.
-9. Clinician and caregiver desktop/tablet views read reports and overrides.
+## Human-in-the-loop boundaries
 
-### Human-in-the-loop boundaries
-- AI may coach and score structured drills.
-- AI should escalate when confidence drops.
-- AI should ask for room adjustments when the environment is off-standard.
-- AI should not diagnose or override clinician-set constraints.
+- AI may coach and score structured drills
+- AI must escalate when confidence drops or max retries reached
+- AI must request room adjustments when environment is off-standard
+- AI must not diagnose
+- AI must not override clinician-set goals or constraints
 
+---
 
+## Voice reliability requirements
+
+- Continuous mic capture with clear recording state indicator
+- Barge-in while system is speaking
+- Streaming partial transcripts for caregiver debug view
+- Graceful fallback: if STT/TTS/reasoning latency spikes, play cached "please wait" prompt
+- Persistent transcript + event log for audit and clinician review
+- Separate voice styles for child-facing, caregiver-facing, clinician-facing output
+- Latency tracking: turn_end → first_transcript → first_token → first_audio_byte → playback_start
+
+---
+
+## Medical and compliance requirements
+
+| Requirement | Status |
+|-------------|--------|
+| HTTPS everywhere | Pending (Caddy) |
+| HIPAA BAA — Deepgram | Available, must be signed |
+| HIPAA BAA — OpenAI | Available, must be signed |
+| HIPAA BAA — Supabase | Available on Pro+, must be signed |
+| COPPA consent (children < 13) | Not yet implemented |
+| Audit log (who accessed PHI) | Partial (observability middleware) |
+| Data encryption at rest | Supabase default (AES-256) |
+| Session recording for clinician review | Not yet implemented |
+| Clinician override of AI decisions | Escalation queue exists, override not yet wired |
+| Auth + role-based access | Clerk configured, passthrough mode currently |

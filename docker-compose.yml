@@ -1,5 +1,5 @@
 services:
-  # ── TalkBuddy core API + therapy UI ────────────────────────────────────────
+  # ── TalkBuddy core API + therapy UI ─────────────────────────────────────────
   app:
     image: speech-intellegence-core
     build:
@@ -7,10 +7,11 @@ services:
       dockerfile: Dockerfile
     container_name: talkbuddy-app
     restart: unless-stopped
-    ports:
-      - "18200:8000"        # separate host port from speech-filters on 18100
+    # Not exposed directly — Caddy proxies all traffic
+    expose:
+      - "8000"
     env_file:
-      - .env                # copy .env.example → .env and fill in your keys
+      - .env
     environment:
       APP_ENV: ${APP_ENV:-development}
     healthcheck:
@@ -25,3 +26,35 @@ services:
       options:
         max-size: "20m"
         max-file: "5"
+
+  # ── Caddy HTTPS reverse proxy ────────────────────────────────────────────────
+  # Handles TLS termination so the iPad gets HTTPS (required for microphone).
+  # Production: set DOMAIN=yourdomain.com in .env — Caddy auto-renews the cert.
+  # Local iPad testing: use `npx cloudflared tunnel --url http://localhost:18200`
+  #   or `ngrok http 18200` for an instant HTTPS tunnel without a domain.
+  caddy:
+    image: caddy:2-alpine
+    container_name: talkbuddy-caddy
+    restart: unless-stopped
+    ports:
+      - "80:80"       # HTTP (redirects to HTTPS in production)
+      - "443:443"     # HTTPS
+      - "18200:80"    # Dev convenience: plain HTTP on 18200 (desktop only)
+    volumes:
+      - ./Caddyfile:/etc/caddy/Caddyfile:ro
+      - caddy_data:/data       # TLS certs — persisted across restarts
+      - caddy_config:/config
+    environment:
+      DOMAIN: ${DOMAIN:-localhost}
+    depends_on:
+      app:
+        condition: service_healthy
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "10m"
+        max-file: "3"
+
+volumes:
+  caddy_data:
+  caddy_config:

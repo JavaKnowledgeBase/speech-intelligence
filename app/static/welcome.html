@@ -1,11 +1,18 @@
 ﻿<!DOCTYPE html>
 <html lang="en">
 <head>
-  <meta charset="UTF-8" />
-  <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no, viewport-fit=cover" />
-  <meta name="apple-mobile-web-app-capable" content="yes" />
-  <meta name="theme-color" content="#0f766e" />
-  <title>TalkBuddy â€” Welcome</title>
+  <meta charset=”UTF-8” />
+  <meta name=”viewport” content=”width=device-width, initial-scale=1.0, user-scalable=no, viewport-fit=cover” />
+  <!-- PWA + iPad home screen -->
+  <meta name=”mobile-web-app-capable” content=”yes” />
+  <meta name=”apple-mobile-web-app-capable” content=”yes” />
+  <meta name=”apple-mobile-web-app-status-bar-style” content=”black-translucent” />
+  <meta name=”apple-mobile-web-app-title” content=”TalkBuddy” />
+  <meta name=”theme-color” content=”#0f766e” />
+  <link rel=”manifest” href=”/static/manifest.json” />
+  <!-- Apple touch icon (fallback until real icons are added) -->
+  <link rel=”apple-touch-icon” href=”/static/icon-192.png” />
+  <title>TalkBuddy</title>
   <link rel="stylesheet" href="/static/therapy.css" />
   <style>
     :root {
@@ -748,8 +755,17 @@ setInterval(() => {
   async function startSessionForChild() {
     try {
       const children = await fetchWithTimeout('/children').then(r => r.json());
-      const fn = data.firstName.charAt(0).toLowerCase();
-      const matched = children.find(c => c.name.toLowerCase().startsWith(fn)) || children[0];
+      const fn = data.firstName.toLowerCase();
+      let matched = children.find(c => c.name.toLowerCase() === fn)
+                 || children.find(c => c.name.toLowerCase().startsWith(fn.charAt(0)));
+      if (!matched) {
+        // Child not found — create a new profile on the fly
+        matched = await fetchWithTimeout('/children', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ name: data.firstName, age: 4 }),
+        }).then(r => r.json());
+      }
       if (!matched) return null;
       const session = await fetchWithTimeout('/session/start', {
         method: 'POST',

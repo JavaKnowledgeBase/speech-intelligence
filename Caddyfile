@@ -1,0 +1,49 @@
+# ── TalkBuddy Caddy reverse proxy ─────────────────────────────────────────────
+#
+# Production (real domain):
+#   Set DOMAIN=yourdomain.com in .env → Caddy auto-gets Let's Encrypt cert.
+#
+# Local iPad testing (same WiFi network):
+#   Use cloudflared or ngrok for an instant HTTPS tunnel:
+#     npx cloudflared tunnel --url http://localhost:18200
+#     ngrok http 18200
+#   Both give you a public HTTPS URL the iPad can reach.
+#
+# Local dev (desktop browser only):
+#   Leave DOMAIN unset → plain HTTP on port 80, no cert needed.
+# ──────────────────────────────────────────────────────────────────────────────
+
+{
+    # Use staging CA while testing to avoid Let's Encrypt rate limits.
+    # Remove this block for production.
+    # acme_ca https://acme-staging-v02.api.letsencrypt.org/directory
+}
+
+# If DOMAIN env var is set, Caddy obtains a real TLS cert automatically.
+{$DOMAIN:localhost} {
+
+    # Security headers — required for medical-grade deployment
+    header {
+        Strict-Transport-Security "max-age=31536000; includeSubDomains"
+        X-Content-Type-Options    "nosniff"
+        X-Frame-Options           "SAMEORIGIN"
+        Referrer-Policy           "strict-origin-when-cross-origin"
+        Permissions-Policy        "microphone=(self), camera=()"
+    }
+
+    # Proxy everything to the FastAPI app
+    reverse_proxy app:8000 {
+        header_up Host {host}
+        header_up X-Real-IP {remote_host}
+        header_up X-Forwarded-Proto {scheme}
+    }
+
+    # Compress responses
+    encode gzip
+
+    # Log access
+    log {
+        output stdout
+        format console
+    }
+}

@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+from concurrent.futures import ThreadPoolExecutor
 from uuid import uuid4
 
 from app.clock import utc_now
@@ -213,8 +214,11 @@ class TherapyOrchestrator:
     def process_turn(self, session_id: str, transcript: str, attention_score: float, source: str = "stt_stream") -> SpeechEvaluation:
         session = store.sessions[session_id]
         attempted_target = session.current_target
-        pronunciation_score, speech_trace = self.speech_expert.evaluate(attempted_target, transcript)
-        engagement_score, engagement_trace = self.engagement_expert.assess(attention_score)
+        with ThreadPoolExecutor(max_workers=2) as pool:
+            speech_future = pool.submit(self.speech_expert.evaluate, attempted_target, transcript)
+            engagement_future = pool.submit(self.engagement_expert.assess, attention_score)
+            pronunciation_score, speech_trace = speech_future.result()
+            engagement_score, engagement_trace = engagement_future.result()
         reasoning_trace = self.reasoning_expert.decide(pronunciation_score=pronunciation_score, engagement_score=engagement_score, retries_used=session.retries_used, max_retries=session.max_retries)
         workflow_trace = self.workflow_expert.record("Therapy turn processed through expert pipeline.")
         success = pronunciation_score >= 0.9 and engagement_score >= 0.55
